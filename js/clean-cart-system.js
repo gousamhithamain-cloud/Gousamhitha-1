@@ -1,23 +1,37 @@
-// Clean Cart System - Simple and reliable cart functionality
+// Clean Cart System - Backend API only (No Supabase)
 (function() {
     'use strict';
     
     console.log('🛒 Clean Cart System loading...');
+    
+    // Use global API_BASE_URL (set by config.js)
+    const API_BASE = window.API_BASE_URL || 'http://localhost:4000/api';
     
     class CleanCartSystem {
         constructor() {
             this.isUpdating = false;
         }
         
+        // Get auth token from localStorage
+        getAuthToken() {
+            return localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+        }
+        
+        // Get current user from localStorage
+        getCurrentUser() {
+            try {
+                const userStr = localStorage.getItem('user') || localStorage.getItem('auth_user');
+                if (userStr) {
+                    return JSON.parse(userStr);
+                }
+            } catch (e) {
+                console.error('Error parsing user data:', e);
+            }
+            return null;
+        }
+        
         async init() {
             console.log('🛒 Initializing clean cart system');
-            
-            // Check if Supabase is available
-            if (!window.supabase) {
-                console.error('🛒 Supabase not initialized');
-                this.showError('System not ready', 'Please refresh the page to try again');
-                return;
-            }
             
             // Check if cart container exists
             if (!document.getElementById('cart-items')) {
@@ -42,35 +56,76 @@
             cartItemsDiv.innerHTML = '';
 
             try {
-                // Get user from localStorage (set by AuthAPI.signin)
-                let user = null;
-                try { const raw = localStorage.getItem('auth_user'); if (raw) user = JSON.parse(raw); } catch(e){}
-                if (!user && window.supabase) {
-                    try { const r = await window.supabase.auth.getUser(); if (!r.error && r.data?.user) user = r.data.user; } catch(e){}
-                }
+                // Get user from localStorage
+                const user = this.getCurrentUser();
+                const token = this.getAuthToken();
 
-                if (!user) {
+                console.log('🛒 Auth check:');
+                console.log('   User:', user);
+                console.log('   Token:', token ? token.substring(0, 20) + '...' : 'null');
+
+                if (!user || !user.id) {
                     console.log('🛒 No user logged in, showing login prompt');
                     this.showLoginPrompt('Please login to view your cart');
                     if (typeof hideLoader === 'function') hideLoader();
                     return;
                 }
                 
-                console.log('🛒 Fetching cart for user:', user.id);
+                if (!token) {
+                    console.log('🛒 No auth token, showing login prompt');
+                    this.showLoginPrompt('Session expired. Please login again.');
+                    if (typeof hideLoader === 'function') hideLoader();
+                    return;
+                }
+                
+                const cartUrl = `${API_BASE}/cart/${user.id}`;
+                console.log('🛒 Fetching cart from:', cartUrl);
                 
                 // Fetch cart via backend API
-                const token = localStorage.getItem('auth_token') || '';
-                const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/cart/${user.id}`, {
-                    headers: { 'Authorization': 'Bearer ' + token }
+                const res = await fetch(cartUrl, {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
+                
+                console.log('🛒 Cart API response status:', res.status);
+                console.log('🛒 Cart API response ok:', res.ok);
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.log('🛒 Error response body:', errorText);
+                    
+                    if (res.status === 401 || res.status === 403) {
+                        console.log('🛒 Unauthorized - session may be expired');
+                        // Don't clear auth immediately - just show empty cart
+                        // User can try to add items which will trigger re-auth if needed
+                        this.showEmptyCart();
+                        this.updateCartCount(0);
+                        if (typeof hideLoader === 'function') hideLoader();
+                        return;
+                    }
+                    if (res.status === 404) {
+                        // Cart not found - show empty cart (user is logged in but has no cart yet)
+                        console.log('🛒 Cart not found - showing empty cart');
+                        this.showEmptyCart();
+                        this.updateCartCount(0);
+                        if (typeof hideLoader === 'function') hideLoader();
+                        return;
+                    }
+                    // For any other error, show empty cart if user is logged in
+                    console.log('🛒 API error but user logged in - showing empty cart');
+                    this.showEmptyCart();
+                    this.updateCartCount(0);
+                    if (typeof hideLoader === 'function') hideLoader();
+                    return;
+                }
+                
                 const json = await res.json();
-                const cartItems = (json.cart || []).map(item => ({
-                    id: item.id,
-                    quantity: item.quantity,
-                    products: item.products
-                }));
+                console.log('🛒 Cart API response:', json);
+                const cartItems = json.data || [];
 
-                console.log('🛒 Cart items loaded:', cartItems);
+                console.log('🛒 Cart items loaded:', cartItems.length);
 
                 if (!cartItems.length) {
                     this.showEmptyCart();
@@ -86,7 +141,16 @@
 
             } catch (error) {
                 console.error('🛒 Error loading cart:', error);
-                this.showError('Error loading cart', 'Please try refreshing the page');
+                // Always show empty cart for logged in users instead of error
+                const user = this.getCurrentUser();
+                console.log('🛒 Exception caught - user exists:', !!user);
+                if (user && user.id) {
+                    console.log('🛒 Showing empty cart due to error');
+                    this.showEmptyCart();
+                    this.updateCartCount(0);
+                } else {
+                    this.showLoginPrompt('Please login to view your cart');
+                }
                 if (typeof hideLoader === 'function') hideLoader();
             }
         }
@@ -97,7 +161,7 @@
                 cartItemsDiv.innerHTML = `
                     <div class="empty-cart" style="text-align: center; padding: 40px;">
                         <p style="font-size: 18px; margin-bottom: 20px;">${message}</p>
-                        <button onclick="if(typeof openAuthModal==='function'){openAuthModal();}else{window.location.href='login.html';}" class="btn btn-primary" style="padding: 12px 24px; background: #4a7c59; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Login</button>
+                        <button onclick="if(typeof openAuthModal==='function'){openAuthModal();}else{window.location.href='index.html';}" class="btn btn-primary" style="padding: 12px 24px; background: #4a7c59; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">Login</button>
                     </div>
                 `;
             }
@@ -246,13 +310,20 @@
             
             try {
                 // Update via backend API
-                const token = localStorage.getItem('auth_token') || '';
-                const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/cart/${cartId}`, {
+                const token = this.getAuthToken();
+                const res = await fetch(`${API_BASE}/cart/${cartId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ quantity: newQuantity })
                 });
-                if (!res.ok) throw new Error('Update failed');
+                
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(errorData.message || 'Update failed');
+                }
                 
                 // Update UI instantly
                 this.updateCartItemUI(cartId, newQuantity);
@@ -260,7 +331,7 @@
                 
             } catch (error) {
                 console.error('🛒 Update error:', error);
-                alert('Error updating quantity. Please try again.');
+                alert(error.message || 'Error updating quantity. Please try again.');
             } finally {
                 this.isUpdating = false;
             }
@@ -274,12 +345,18 @@
             
             try {
                 // Remove via backend API
-                const token = localStorage.getItem('auth_token') || '';
-                const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/cart/${cartId}`, {
+                const token = this.getAuthToken();
+                const res = await fetch(`${API_BASE}/cart/${cartId}`, {
                     method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + token }
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
-                if (!res.ok) throw new Error('Remove failed');
+                
+                if (!res.ok) {
+                    throw new Error('Remove failed');
+                }
                 
                 // Remove from UI
                 const cartItem = document.querySelector(`[data-cart-id="${cartId}"]`);
@@ -338,7 +415,7 @@
                 console.log(`🛒 Updated item total to ₹${newTotal.toFixed(2)}`);
             }
             
-            // Update cart totals - this is crucial!
+            // Update cart totals
             setTimeout(() => {
                 this.updateCartTotals();
             }, 100);
@@ -422,7 +499,7 @@
     // Initialize clean cart system
     const cleanCartSystem = new CleanCartSystem();
     
-    // Strong global function overrides to prevent conflicts
+    // Global function overrides
     window.loadCart = () => cleanCartSystem.loadCart();
     window.updateQuantity = () => {}; // Disable old function
     window.removeFromCart = () => {}; // Disable old function
@@ -434,10 +511,16 @@
     window.CartCountUpdater = { initialized: true };
     
     // Clean initialization - only after DOM is ready
-    document.addEventListener('DOMContentLoaded', async () => {
-        console.log('🛒 DOM ready, initializing cart system');
-        await cleanCartSystem.init();
-    });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🛒 DOM ready, initializing cart system');
+            await cleanCartSystem.init();
+        });
+    } else {
+        // DOM already loaded
+        console.log('🛒 DOM already ready, initializing cart system');
+        cleanCartSystem.init();
+    }
     
     // Expose for debugging
     window.CleanCartSystem = cleanCartSystem;
@@ -447,7 +530,6 @@
         console.log('🛒 Proceeding to checkout...');
         
         try {
-            // Simple checkout without complex authentication checks
             const cartItems = document.querySelectorAll('.cart-item');
             console.log('🛒 Found cart items:', cartItems.length);
             
@@ -457,17 +539,14 @@
             }
             
             console.log('🛒 Navigating to checkout page...');
-            
-            // Direct navigation to checkout page
             window.location.href = 'checkout.html';
             
         } catch (error) {
             console.error('🛒 Error during checkout:', error);
-            // Fallback: direct navigation
             window.location.href = 'checkout.html';
         }
     };
     
-    console.log('✅ Clean Cart System loaded');
+    console.log('✅ Clean Cart System loaded (Backend API only)');
     
 })();

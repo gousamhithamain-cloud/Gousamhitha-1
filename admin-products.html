@@ -175,58 +175,17 @@
     <script>
         let editingProductId = null;
         let productChannel = null;
-
-        // Wait for Supabase to be ready
         let isInitialized = false;
         
-        window.addEventListener('supabaseReady', async () => {
-            if (isInitialized) return;
-            isInitialized = true;
-            
-            console.log('? Supabase ready, ultra-fast products will load...');
-            // Ultra-fast products loader will handle this automatically
-            await loadVendorsForDropdown();
-            setupRealtimeSubscription();
-        });
-        
-        // Also try after a delay
-        setTimeout(async () => {
-            if (window.supabase && !isInitialized) {
-                isInitialized = true;
-                // Ultra-fast products loader will handle this automatically
-                await loadVendorsForDropdown();
-                setupRealtimeSubscription();
-            }
-        }, 1000);
-        
-        // Override loadProducts to use ultra-fast loader
-        window.loadProducts = function() {
-            if (window.loadProductsUltraFast) {
-                return window.loadProductsUltraFast();
-            }
-        };
+        console.log('🔧 Admin products page script loaded');
 
-        function setupRealtimeSubscription() {
-            productChannel = window.supabase
-                .channel('products-channel')
-                .on('postgres_changes', 
-                    { event: '*', schema: 'public', table: 'products' },
-                    (payload) => {
-                        console.log('Product change detected:', payload);
-                        loadProducts();
-                    }
-                )
-                .subscribe();
-            
-            console.log('Realtime subscription active for products');
-        }
-
+        // Define loadProducts function FIRST
         async function loadProducts() {
             const tbody = document.getElementById('products-table-body');
             
             // Check if already loading to prevent duplicates
             if (tbody.dataset.loading === 'true') {
-                console.log('?? Products already loading, skipping...');
+                console.log('⚠️ Products already loading, skipping...');
                 return;
             }
             
@@ -234,25 +193,70 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading products...</td></tr>';
             
             try {
-                const { data: products, error } = await window.supabase
-                    .from('products')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+                console.log('📦 Fetching products from backend API...');
                 
-                if (error) {
-                    console.error('Error loading products:', error);
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading products</td></tr>';
-                    return;
+                // Use backend API instead of direct Supabase
+                const response = await fetch('http://localhost:4000/api/products');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                displayProducts(products || []);
+                const result = await response.json();
+                console.log('📥 API Response:', result);
+                
+                // Handle different response formats
+                const products = result.products || result.data?.items || result.data || [];
+                
+                console.log('✅ Products loaded:', products.length);
+                displayProducts(products);
             } catch (error) {
                 console.error('Error loading products:', error);
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading products</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading products: ' + error.message + '</td></tr>';
             } finally {
                 tbody.dataset.loading = 'false';
             }
         }
+
+        function setupRealtimeSubscription() {
+            // Realtime updates disabled - using backend API polling instead
+            console.log('Realtime subscription disabled - using backend API');
+            
+            // Poll for updates every 30 seconds
+            setInterval(async () => {
+                await loadProducts();
+            }, 30000);
+        }
+        
+        // Wait for DOM ready
+        window.addEventListener('supabaseReady', async () => {
+            console.log('✅ Received supabaseReady event');
+            if (isInitialized) {
+                console.log('⚠️ Already initialized, skipping...');
+                return;
+            }
+            isInitialized = true;
+            
+            console.log('🚀 Starting initialization...');
+            
+            await loadVendorsForDropdown();
+            setupRealtimeSubscription();
+        });
+        
+        // Load products immediately without waiting for Supabase
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('� DOM loaded, loading products...');
+            await loadProducts();
+        });
+        
+        // Also try after a delay as fallback
+        setTimeout(async () => {
+            console.log('⏰ Timeout check - loading products if not already loaded');
+            const tbody = document.getElementById('products-table-body');
+            if (tbody && tbody.innerHTML.includes('Loading products')) {
+                await loadProducts();
+            }
+        }, 1000);
 
         function displayProducts(products) {
             const tbody = document.getElementById('products-table-body');
@@ -282,17 +286,21 @@
 
         async function loadVendorsForDropdown() {
             try {
-                const { data: vendors, error } = await window.supabase
-                    .from('vendors')
-                    .select('id, vendor_name, business_name')
-                    .eq('status', 'active')
-                    .order('vendor_name');
+                console.log('📦 Fetching vendors from backend API...');
+                const response = await fetch('http://localhost:4000/api/vendors?status=active');
                 
-                if (error) throw error;
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const vendors = result.data?.items || result.vendors || [];
                 
                 const vendorSelect = document.getElementById('edit-vendor');
                 vendorSelect.innerHTML = '<option value="">Select Vendor (Optional)</option>' +
-                    (vendors || []).map(v => `<option value="${v.id}">${v.vendor_name} - ${v.business_name}</option>`).join('');
+                    vendors.map(v => `<option value="${v.id}">${v.vendor_name} - ${v.business_name}</option>`).join('');
+                    
+                console.log('✅ Vendors loaded:', vendors.length);
             } catch (error) {
                 console.error('Error loading vendors:', error);
             }
@@ -300,13 +308,17 @@
 
         async function editProduct(id) {
             try {
-                const { data: product, error } = await window.supabase
-                    .from('products')
-                    .select('*')
-                    .eq('id', id)
-                    .single();
+                console.log('📝 Fetching product details for:', id);
+                const response = await fetch(`http://localhost:4000/api/products/${id}`);
                 
-                if (error || !product) {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const product = result.data || result.product;
+                
+                if (!product) {
                     if (typeof showToast === 'function') {
                         showToast('Error loading product details', 'error');
                     }
@@ -401,17 +413,18 @@
             }
 
             try {
-                const { error } = await window.supabase
-                    .from('products')
-                    .update(productData)
-                    .eq('id', editingProductId);
+                console.log('💾 Updating product via backend API...');
+                const response = await fetch(`http://localhost:4000/api/products/${editingProductId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(productData)
+                });
                 
-                if (error) {
-                    console.error('Error updating product:', error);
-                    if (typeof showToast === 'function') {
-                        showToast('Error updating product: ' + error.message, 'error');
-                    }
-                    return;
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to update product');
                 }
                 
                 if (typeof showToast === 'function') {
@@ -425,7 +438,7 @@
             } catch (error) {
                 console.error('Error saving product:', error);
                 if (typeof showToast === 'function') {
-                    showToast('Error saving product. Please try again.', 'error');
+                    showToast('Error saving product: ' + error.message, 'error');
                 }
             }
         }
@@ -436,30 +449,25 @@
             }
 
             try {
-                const { error } = await window.supabase
-                    .from('products')
-                    .delete()
-                    .eq('id', id);
+                console.log('🗑️ Deleting product via backend API...');
+                const response = await fetch(`http://localhost:4000/api/products/${id}`, {
+                    method: 'DELETE'
+                });
                 
-                if (error) {
-                    console.error('Error deleting product:', error);
-                    if (typeof showToast === 'function') {
-                        showToast('Error deleting product: ' + error.message, 'error');
-                    }
-                    return;
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to delete product');
                 }
                 
                 console.log('Product deleted successfully');
                 if (typeof showToast === 'function') {
                     showToast('Product deleted successfully', 'success');
                 }
-                // Clear cache so the list reloads fresh from DB
-                if (window.AdminCache) window.AdminCache.clear();
                 await loadProducts();
             } catch (error) {
                 console.error('Error deleting product:', error);
                 if (typeof showToast === 'function') {
-                    showToast('Error deleting product. Please try again.', 'error');
+                    showToast('Error deleting product: ' + error.message, 'error');
                 }
             }
         }

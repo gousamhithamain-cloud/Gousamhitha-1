@@ -119,6 +119,8 @@ class UniversalSearch {
         }
 
         if (!query || query.length < 2) return;
+        
+        try {
             const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/products?search=${encodeURIComponent(query)}`);
             const json = await res.json();
             const seen = new Set();

@@ -4,12 +4,13 @@
  * No direct Supabase DB calls from frontend.
  */
 
+// Use global API_BASE_URL (set by config.js)
 const API_BASE = window.API_BASE_URL || 'http://localhost:4000/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch(path, options = {}) {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token');
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -77,25 +78,28 @@ const AuthAPI = {
 
     signin: async (email, password) => {
         const data = await apiFetch('/auth/signin', { method: 'POST', body: JSON.stringify({ email, password }) });
-        if (data.session?.access_token) {
-            localStorage.setItem('auth_token', data.session.access_token);
-            localStorage.setItem('auth_user', JSON.stringify(data.user));
+        const result = data.data || data;
+        if (result.session?.access_token) {
+            localStorage.setItem('token', result.session.access_token);
+            localStorage.setItem('user', JSON.stringify(result.user));
         }
         return data;
     },
 
     signout: async () => {
         await apiFetch('/auth/signout', { method: 'POST' }).catch(() => {});
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
     },
 
     getUser: () => {
-        const raw = localStorage.getItem('auth_user');
+        const raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
         return raw ? JSON.parse(raw) : null;
     },
 
-    isLoggedIn: () => !!localStorage.getItem('auth_token')
+    isLoggedIn: () => !!localStorage.getItem('token') || !!localStorage.getItem('auth_token')
 };
 
 // ── Expose globally ───────────────────────────────────────────────────────────

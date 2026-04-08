@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Products - Gousamhitha Admin</title>
+    <link rel="stylesheet" href="admin-styles.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <!-- Load config FIRST -->
+    <script src="js/config.js"></script>
+</head>
+<body class="admin-page">
+    <div class="admin-layout">
+        <aside class="admin-sidebar">
+            <div class="sidebar-header">
+                <h2>Gousamhitha Admin</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="admin-dashboard.html" class="nav-link">Dashboard</a>
+                <a href="admin-products.html" class="nav-link active">Products</a>
+                <a href="admin-add-product.html" class="nav-link">Add Product</a>
+                <a href="admin-vendors.html" class="nav-link">Vendors</a>
+                <a href="admin-orders.html" class="nav-link">Orders</a>
+                <a href="admin-payouts.html" class="nav-link">Vendor Payouts</a>
+                <a href="#" class="nav-link" onclick="adminLogout()">Logout</a>
+            </nav>
+        </aside>
+        
+        <main class="admin-content">
+            <div class="content-header">
+                <h1>Product Management</h1>
+            </div>
+            
+            <div class="table-container">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="products-table-body">
+                        <tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading products...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Panel Overlay -->
+    <div class="edit-overlay" id="edit-overlay" onclick="closeEditPanel()"></div>
+    
+    <!-- Edit Panel -->
+    <div class="edit-panel" id="edit-panel">
+        <div class="edit-panel-header">
+            <h2>Edit Product</h2>
+            <button class="close-panel" onclick="closeEditPanel()">&times;</button>
+        </div>
+        <div class="edit-panel-content">
+            <form id="edit-product-form" onsubmit="saveProductEdit(event)">
+                <input type="hidden" id="edit-product-id">
+                
+                <div class="form-group">
+                    <label>Product Name</label>
+                    <input type="text" id="edit-name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="edit-category" required>
+                        <option value="Fruits & Vegetables">Fruits & Vegetables</option>
+                        <option value="Daily Staples">Daily Staples</option>
+                        <option value="Snacks & More">Snacks & More</option>
+                        <option value="Bakery & Dairy">Bakery & Dairy</option>
+                        <option value="Home Food">Home Food</option>
+                        <option value="Special Categories">Special Categories</option>
+                        <option value="Conscious Living">Conscious Living</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Price (₹)</label>
+                    <input type="number" id="edit-price" required min="0" step="0.01">
+                </div>
+                
+                <div class="form-group">
+                    <label>Stock Quantity</label>
+                    <input type="number" id="edit-stock" required min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Unit</label>
+                    <select id="edit-unit" required>
+                        <option value="kg">Kilogram (kg)</option>
+                        <option value="g">Gram (g)</option>
+                        <option value="l">Liter (l)</option>
+                        <option value="ml">Milliliter (ml)</option>
+                        <option value="piece">Piece</option>
+                        <option value="pack">Pack</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Unit Quantity</label>
+                    <input type="number" id="edit-unit-quantity" step="0.01" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Display Unit (e.g., "500g", "1L")</label>
+                    <input type="text" id="edit-display-unit">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" class="btn-secondary" onclick="closeEditPanel()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/admin-api-client.js"></script>
+    <script src="js/admin-products-handler.js"></script>
+</body>
+</html>

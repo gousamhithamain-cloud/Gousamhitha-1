@@ -130,7 +130,7 @@ const schemas = {
             })
     }),
 
-    // Order validation
+    // Order validation - supports both old and new column names
     createOrder: Joi.object({
         user_id: Joi.string().uuid().required(),
         customer_name: Joi.string().trim().min(2).max(200).required()
@@ -138,32 +138,34 @@ const schemas = {
                 'string.empty': 'Customer name is required',
                 'string.min': 'Name must be at least 2 characters'
             }),
-        customer_email: Joi.string().email().required()
+        // Support both email and customer_email
+        email: Joi.string().email().optional(),
+        customer_email: Joi.string().email().optional(),
+        // Support both phone and customer_phone
+        phone: Joi.string().pattern(/^[0-9]{10}$/).allow('', null).optional()
             .messages({
-                'string.empty': 'Email is required',
-                'string.email': 'Invalid email format'
+                'string.pattern.base': 'Phone must be 10 digits'
             }),
         customer_phone: Joi.string().pattern(/^[0-9]{10}$/).allow('', null).optional()
             .messages({
                 'string.pattern.base': 'Phone must be 10 digits'
             }),
-        delivery_address: Joi.string().trim().min(10).max(500).required()
-            .messages({
-                'string.empty': 'Delivery address is required',
-                'string.min': 'Address must be at least 10 characters'
-            }),
+        // Support both address and delivery_address
+        address: Joi.string().trim().min(10).max(500).optional(),
+        delivery_address: Joi.string().trim().min(10).max(500).optional(),
         city: Joi.string().trim().max(100).allow('', null).optional(),
         pincode: Joi.string().pattern(/^[0-9]{6}$/).allow('', null).optional()
             .messages({
                 'string.pattern.base': 'Pincode must be 6 digits'
             }),
+        // Support both notes and order_notes
+        notes: Joi.string().trim().max(500).allow('', null).optional(),
         order_notes: Joi.string().trim().max(500).allow('', null).optional(),
-        subtotal: Joi.number().positive().precision(2).required(),
+        // Support both total and total_amount
+        total: Joi.number().positive().precision(2).optional(),
+        total_amount: Joi.number().positive().precision(2).optional(),
+        subtotal: Joi.number().positive().precision(2).optional(),
         delivery_charge: Joi.number().min(0).precision(2).default(0),
-        total_amount: Joi.number().positive().precision(2).required()
-            .messages({
-                'number.positive': 'Total amount must be positive'
-            }),
         payment_method: Joi.string().valid('COD', 'UPI', 'Card', 'NetBanking').default('COD'),
         items: Joi.array().items(
             Joi.object({
@@ -176,7 +178,9 @@ const schemas = {
             .messages({
                 'array.min': 'Order must contain at least one item'
             })
-    }),
+    }).or('email', 'customer_email') // At least one email field required
+      .or('address', 'delivery_address') // At least one address field required
+      .or('total', 'total_amount'), // At least one total field required
 
     updateOrderStatus: Joi.object({
         status: Joi.string().valid('Pending', 'Packed', 'Shipped', 'Delivered', 'Cancelled').required()

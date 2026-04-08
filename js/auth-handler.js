@@ -1,32 +1,90 @@
-// ✅ SECURE AUTH HANDLER - All authentication via backend API
-// NO direct database or Supabase access
+// ✅ SECURE AUTH HANDLER - Session Persistence Fixed
+// All authentication via backend API with proper localStorage management
 
 console.log('🔐 Loading secure auth handler...');
 
-const API_BASE = window.API_BASE_URL || 'http://localhost:4000/api';
+// Ensure API_BASE_URL is set (config.js should have set this)
+if (!window.API_BASE_URL) {
+    window.API_BASE_URL = 'http://localhost:4000/api';
+}
 
-// ── Sign Up ───────────────────────────────────────────────────────────────────
+// Helper to get API base
+function getAPIBase() {
+    return window.API_BASE_URL || 'http://localhost:4000/api';
+}
+
+console.log('🔗 Using API:', getAPIBase());
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STORAGE HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function saveAuthData(token, user) {
+    try {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        console.log('✅ Auth data saved:', { email: user.email, hasToken: !!token });
+    } catch (e) {
+        console.error('❌ Failed to save auth data:', e);
+    }
+}
+
+function getAuthToken() {
+    return localStorage.getItem('token');
+}
+
+function getAuthUser() {
+    try {
+        const userStr = localStorage.getItem('user');
+        return userStr ? JSON.parse(userStr) : null;
+    } catch (e) {
+        console.error('❌ Failed to parse user data:', e);
+        return null;
+    }
+}
+
+function clearAuthData() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    // Also clear legacy keys
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    console.log('✅ Auth data cleared');
+}
+
+function isLoggedIn() {
+    return !!getAuthToken() && !!getAuthUser();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SIGN UP
+// ══════════════════════════════════════════════════════════════════════════════
+
 async function handleSignUp(event) {
     event.preventDefault();
     
-    const name = document.getElementById('signup-name').value;
-    const email = document.getElementById('signup-email').value;
-    const mobile = document.getElementById('signup-mobile').value;
-    const password = document.getElementById('signup-password').value;
-    const confirmPassword = document.getElementById('signup-confirm').value;
+    const name = document.getElementById('signup-name')?.value;
+    const email = document.getElementById('signup-email')?.value;
+    const mobile = document.getElementById('signup-mobile')?.value;
+    const password = document.getElementById('signup-password')?.value;
+    const confirmPassword = document.getElementById('signup-confirm')?.value;
     const messageDiv = document.getElementById('signup-message');
     
     if (password !== confirmPassword) {
-        messageDiv.textContent = 'Passwords do not match';
-        messageDiv.style.color = '#d32f2f';
+        if (messageDiv) {
+            messageDiv.textContent = 'Passwords do not match';
+            messageDiv.style.color = '#d32f2f';
+        }
         return;
     }
     
     try {
-        messageDiv.textContent = 'Creating account...';
-        messageDiv.style.color = '#666';
+        if (messageDiv) {
+            messageDiv.textContent = 'Creating account...';
+            messageDiv.style.color = '#666';
+        }
         
-        const response = await fetch(`${API_BASE}/auth/signup`, {
+        const response = await fetch(`${getAPIBase()}/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -37,51 +95,50 @@ async function handleSignUp(event) {
             })
         });
         
-        const data = await response.json();
+        const result = await response.json();
         
         if (!response.ok) {
-            throw new Error(data.error || 'Signup failed');
+            throw new Error(result.error || 'Signup failed');
         }
         
-        // Store auth token and user data
-        if (data.session?.access_token) {
-            localStorage.setItem('auth_token', data.session.access_token);
-            localStorage.setItem('auth_user', JSON.stringify(data.user));
+        // After signup, auto-login
+        if (messageDiv) {
+            messageDiv.textContent = 'Account created! Logging you in...';
+            messageDiv.style.color = '#2e7d32';
         }
         
-        messageDiv.textContent = 'Account created successfully!';
-        messageDiv.style.color = '#2e7d32';
-        
-        setTimeout(() => {
-            closeAuthModal();
-            location.reload();
+        // Auto-login after signup
+        setTimeout(async () => {
+            await handleSignIn({ preventDefault: () => {} }, email, password);
         }, 1000);
         
     } catch (error) {
         console.error('Signup error:', error);
-        messageDiv.textContent = error.message || 'Error creating account';
-        messageDiv.style.color = '#d32f2f';
+        if (messageDiv) {
+            messageDiv.textContent = error.message || 'Error creating account';
+            messageDiv.style.color = '#d32f2f';
+        }
     }
 }
 
-// ── Sign In ───────────────────────────────────────────────────────────────────
-async function handleSignIn(event) {
+// ══════════════════════════════════════════════════════════════════════════════
+// SIGN IN
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function handleSignIn(event, emailOverride, passwordOverride) {
     event.preventDefault();
-    console.log('🔐 Sign in attempt started');
     
     const emailInput = document.getElementById('signin-email');
     const passwordInput = document.getElementById('signin-password');
     const messageDiv = document.getElementById('signin-message');
     
-    const email = emailInput ? emailInput.value : '';
-    const password = passwordInput ? passwordInput.value : '';
+    const email = emailOverride || emailInput?.value;
+    const password = passwordOverride || passwordInput?.value;
     
     if (!email || !password) {
         if (messageDiv) {
             messageDiv.textContent = '⚠️ Please enter email and password';
             messageDiv.style.color = '#d32f2f';
-            messageDiv.style.backgroundColor = '#ffebee';
-            messageDiv.style.display = 'block';
         }
         return;
     }
@@ -90,227 +147,257 @@ async function handleSignIn(event) {
         if (messageDiv) {
             messageDiv.textContent = '⏳ Signing in...';
             messageDiv.style.color = '#666';
-            messageDiv.style.backgroundColor = '#f5f5f5';
-            messageDiv.style.display = 'block';
         }
         
-        console.log('Attempting login for:', email);
+        console.log('🔐 Attempting login for:', email);
         
-        const response = await fetch(`${API_BASE}/auth/signin`, {
+        const response = await fetch(`${getAPIBase()}/auth/signin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
         
-        const data = await response.json();
+        const result = await response.json();
+        console.log('📥 Login response:', result);
         
         if (!response.ok) {
-            throw new Error(data.error || 'Login failed');
+            throw new Error(result.error || 'Login failed');
         }
         
-        // Store auth token and user data
-        if (data.session?.access_token) {
-            localStorage.setItem('auth_token', data.session.access_token);
-            localStorage.setItem('auth_user', JSON.stringify(data.user));
+        // Extract data from response
+        const { user, session } = result.data || result;
+        
+        if (!session?.access_token || !user) {
+            throw new Error('Invalid response from server');
         }
         
-        console.log('✅ Login successful');
+        // Save auth data
+        saveAuthData(session.access_token, user);
         
-        // Check if admin
-        if (email === 'admin@123.com') {
-            if (messageDiv) {
-                messageDiv.textContent = '✓ Login successful! Redirecting to admin...';
-                messageDiv.style.color = '#2e7d32';
-                messageDiv.style.backgroundColor = '#e8f5e9';
-            }
-            setTimeout(() => {
-                window.location.href = 'admin-dashboard.html';
-            }, 500);
-            return;
-        }
+        console.log('✅ Login successful for:', user.email);
         
         if (messageDiv) {
             messageDiv.textContent = '✓ Login successful!';
             messageDiv.style.color = '#2e7d32';
-            messageDiv.style.backgroundColor = '#e8f5e9';
-            messageDiv.style.fontWeight = '600';
-            messageDiv.style.display = 'block';
         }
         
+        // Close modal and update UI
         setTimeout(() => {
             closeAuthModal();
-            location.reload();
+            updateUIAfterLogin();
+            
+            // Redirect admin users
+            if (user.role === 'admin' || email === 'admin@123.com') {
+                window.location.href = 'admin-dashboard.html';
+            } else {
+                // Reload to apply session
+                window.location.reload();
+            }
         }, 500);
         
     } catch (error) {
         console.error('💥 Login error:', error);
         if (messageDiv) {
-            messageDiv.textContent = '❌ ' + (error.message || 'Login failed. Please check your credentials.');
+            messageDiv.textContent = '❌ ' + (error.message || 'Login failed');
             messageDiv.style.color = '#d32f2f';
-            messageDiv.style.backgroundColor = '#ffebee';
-            messageDiv.style.fontWeight = '600';
-            messageDiv.style.display = 'block';
         }
     }
 }
 
-// ── Logout ────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGOUT
+// ══════════════════════════════════════════════════════════════════════════════
+
 async function logout() {
+    console.log('🚪 Logout function called');
+    
+    // Ask for confirmation
+    if (!confirm('Are you sure you want to logout?')) {
+        console.log('❌ Logout cancelled by user');
+        return;
+    }
+    
     try {
-        const token = localStorage.getItem('auth_token');
+        const token = getAuthToken();
+        console.log('🔑 Token exists:', !!token);
         
         if (token) {
-            await fetch(`${API_BASE}/auth/signout`, {
+            // Call backend signout
+            console.log('📡 Calling backend signout...');
+            await fetch(`${getAPIBase()}/auth/signout`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 }
-            }).catch(() => {});
+            }).catch((err) => {
+                console.log('⚠️ Backend signout error (ignoring):', err);
+            });
         }
         
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+        console.log('🗑️ Clearing auth data...');
+        clearAuthData();
         
+        console.log('✅ Logged out successfully');
+        console.log('🔄 Redirecting to home...');
+        
+        // Force redirect
         window.location.href = 'index.html';
+        
     } catch (error) {
-        console.error('Logout error:', error);
-        // Clear local storage anyway
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+        console.error('❌ Logout error:', error);
+        // Force logout anyway
+        clearAuthData();
         window.location.href = 'index.html';
     }
 }
 
-// Alias for logout (used in HTML)
-function logoutUser() {
-    return logout();
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION RESTORATION
+// ══════════════════════════════════════════════════════════════════════════════
 
-// ── Google Sign In ────────────────────────────────────────────────────────────
-async function handleGoogleSignIn() {
-    const messageDiv = document.getElementById('signin-message');
-    if (messageDiv) {
-        messageDiv.textContent = 'Google Sign-In is not yet configured';
-        messageDiv.style.color = '#f57c00';
-        messageDiv.style.backgroundColor = '#fff3e0';
-        messageDiv.style.display = 'block';
-    }
-    console.log('Google Sign-In not yet implemented');
-}
-
-// ── Google Sign Up ────────────────────────────────────────────────────────────
-async function handleGoogleSignUp() {
-    const messageDiv = document.getElementById('signup-message');
-    if (messageDiv) {
-        messageDiv.textContent = 'Google Sign-Up is not yet configured';
-        messageDiv.style.color = '#f57c00';
-        messageDiv.style.backgroundColor = '#fff3e0';
-        messageDiv.style.display = 'block';
-    }
-    console.log('Google Sign-Up not yet implemented');
-}
-
-// ── Profile Modal Functions ───────────────────────────────────────────────────
-function closeProfileModal() {
-    const modal = document.getElementById('profile-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-function editProfile() {
-    // Redirect to profile page for editing
-    window.location.href = 'profile.html';
-}
-
-// ── Admin Modal Functions ─────────────────────────────────────────────────────
-function closeAdminModal() {
-    const modal = document.getElementById('admin-modal');
-    if (modal) modal.classList.remove('active');
-}
-
-async function handleAdminLoginModal(event) {
-    event.preventDefault();
+function restoreSession() {
+    const token = getAuthToken();
+    const user = getAuthUser();
     
-    const email = document.getElementById('admin-modal-email').value;
-    const password = document.getElementById('admin-modal-password').value;
-    const messageDiv = document.getElementById('admin-modal-message');
+    console.log('🔄 Restoring session...');
+    console.log('   Token exists:', !!token);
+    console.log('   User exists:', !!user);
     
-    try {
-        if (messageDiv) {
-            messageDiv.textContent = 'Signing in...';
-            messageDiv.style.color = '#666';
-            messageDiv.style.backgroundColor = '#f5f5f5';
-            messageDiv.style.display = 'block';
-        }
+    if (token && user) {
+        console.log('✅ Session restored for:', user.email);
+        updateUIAfterLogin();
         
-        const response = await fetch(`${API_BASE}/auth/signin`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+        // Close auth modal if open
+        const authModal = document.getElementById('auth-modal');
+        if (authModal) {
+            authModal.classList.remove('active');
+            authModal.style.display = 'none';
+        }
+    } else {
+        console.log('❌ No active session');
+        updateUIAfterLogout();
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UI UPDATES
+// ══════════════════════════════════════════════════════════════════════════════
+
+function updateUIAfterLogin() {
+    const user = getAuthUser();
+    if (!user) return;
+    
+    console.log('🎨 Updating UI for logged-in user:', user.email);
+    
+    // Update profile button
+    const profileBtn = document.getElementById('profile-btn-desktop') || document.getElementById('profile-btn');
+    if (profileBtn) {
+        profileBtn.classList.add('logged-in');
+        profileBtn.title = user.email;
+        
+        // Show user initial
+        const iconPlaceholder = profileBtn.querySelector('.profile-icon-placeholder');
+        if (iconPlaceholder) {
+            const initial = user.email.charAt(0).toUpperCase();
+            iconPlaceholder.innerHTML = `<div style="width: 32px; height: 32px; border-radius: 50%; background: #4a7c59; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px;">${initial}</div>`;
+        }
+    }
+    
+    // Update profile dropdown if exists
+    const nameEl = document.getElementById('profile-user-name');
+    const emailEl = document.getElementById('profile-user-email');
+    if (nameEl) nameEl.textContent = user.email;
+    if (emailEl) emailEl.textContent = user.email;
+}
+
+function updateUIAfterLogout() {
+    console.log('🎨 Updating UI for logged-out user');
+    
+    // Reset profile button
+    const profileBtn = document.getElementById('profile-btn-desktop') || document.getElementById('profile-btn');
+    if (profileBtn) {
+        profileBtn.classList.remove('logged-in');
+        profileBtn.title = 'Login / Sign Up';
+        
+        // Restore icon
+        const iconPlaceholder = profileBtn.querySelector('.profile-icon-placeholder');
+        if (iconPlaceholder) {
+            iconPlaceholder.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROFILE BUTTON SETUP
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setupProfileButton() {
+    console.log('🔧 Setting up profile button...');
+    
+    const profileBtn = document.getElementById('profile-btn-desktop') || document.getElementById('profile-btn');
+    const profileDropdown = document.getElementById('profile-dropdown');
+    
+    console.log('   Profile button found:', !!profileBtn);
+    console.log('   Profile dropdown found:', !!profileDropdown);
+    
+    if (profileBtn) {
+        // Remove inline onclick
+        profileBtn.removeAttribute('onclick');
+        
+        // Clone to remove all event listeners
+        const newBtn = profileBtn.cloneNode(true);
+        profileBtn.parentNode.replaceChild(newBtn, profileBtn);
+        
+        console.log('✅ Profile button cloned and replaced');
+        
+        // Add new click handler
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('🖱️ Profile button clicked!');
+            console.log('   Is logged in:', isLoggedIn());
+            
+            if (isLoggedIn()) {
+                console.log('✅ User is logged in - redirecting to profile.html');
+                // Always redirect to profile page when logged in
+                window.location.href = 'profile.html';
+            } else {
+                console.log('❌ User not logged in - opening auth modal');
+                // User not logged in - open auth modal
+                openAuthModal();
+            }
         });
         
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error || 'Login failed');
-        }
-        
-        // Store auth token and user data
-        if (data.session?.access_token) {
-            localStorage.setItem('auth_token', data.session.access_token);
-            localStorage.setItem('auth_user', JSON.stringify(data.user));
-        }
-        
-        if (messageDiv) {
-            messageDiv.textContent = 'Login successful! Redirecting...';
-            messageDiv.style.color = '#2e7d32';
-            messageDiv.style.backgroundColor = '#e8f5e9';
-        }
-        
-        setTimeout(() => {
-            window.location.href = 'admin-dashboard.html';
-        }, 500);
-        
-    } catch (error) {
-        console.error('Admin login error:', error);
-        if (messageDiv) {
-            messageDiv.textContent = error.message || 'Login failed';
-            messageDiv.style.color = '#d32f2f';
-            messageDiv.style.backgroundColor = '#ffebee';
-        }
+        console.log('✅ Click handler attached');
+    } else {
+        console.log('❌ Profile button not found!');
     }
-}
-
-// ── Check Auth ────────────────────────────────────────────────────────────────
-function checkAuth() {
-    const token = localStorage.getItem('auth_token');
-    const userStr = localStorage.getItem('auth_user');
     
-    if (token && userStr) {
-        try {
-            return JSON.parse(userStr);
-        } catch (e) {
-            return null;
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const currentBtn = document.getElementById('profile-btn-desktop') || document.getElementById('profile-btn');
+        if (profileDropdown && !currentBtn?.contains(e.target) && !profileDropdown.contains(e.target)) {
+            profileDropdown.style.display = 'none';
         }
-    }
-    return null;
+    });
 }
 
-// ── Get Current User ──────────────────────────────────────────────────────────
-function getCurrentUser() {
-    const userStr = localStorage.getItem('auth_user');
-    if (userStr) {
-        try {
-            return JSON.parse(userStr);
-        } catch (e) {
-            return null;
-        }
-    }
-    return null;
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
 
-// ── Modal Functions ───────────────────────────────────────────────────────────
 function openAuthModal() {
+    // Don't open if already logged in
+    if (isLoggedIn()) {
+        window.location.href = 'profile.html';
+        return;
+    }
+    
     const modal = document.getElementById('auth-modal');
     if (modal) modal.classList.add('active');
 }
@@ -338,115 +425,83 @@ function switchTab(tab) {
     }
 }
 
-// ── Global Exports ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// GOOGLE AUTH (Placeholder)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function handleGoogleSignIn() {
+    alert('Google Sign-In not yet configured');
+}
+
+function handleGoogleSignUp() {
+    alert('Google Sign-Up not yet configured');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GLOBAL EXPORTS
+// ══════════════════════════════════════════════════════════════════════════════
+
 window.handleSignUp = handleSignUp;
 window.handleSignIn = handleSignIn;
 window.logout = logout;
-window.logoutUser = logoutUser;
-window.checkAuth = checkAuth;
-window.getCurrentUser = getCurrentUser;
+window.logoutUser = logout; // Alias for profile page
+window.isLoggedIn = isLoggedIn;
+window.getAuthToken = getAuthToken;
+window.getAuthUser = getAuthUser;
+window.getCurrentUser = getAuthUser; // Alias
+window.checkAuth = getAuthUser; // Alias
 window.openAuthModal = openAuthModal;
 window.closeAuthModal = closeAuthModal;
 window.switchTab = switchTab;
 window.handleGoogleSignIn = handleGoogleSignIn;
 window.handleGoogleSignUp = handleGoogleSignUp;
-window.closeProfileModal = closeProfileModal;
-window.editProfile = editProfile;
-window.closeAdminModal = closeAdminModal;
-window.handleAdminLoginModal = handleAdminLoginModal;
 
-// Legacy compatibility
-window.adminLogout = logout;
-
-// ── Profile Button Setup ──────────────────────────────────────────────────────
-function setupProfileButton() {
-    const profileBtn = document.getElementById('profile-btn-desktop');
-    const bottomNavProfile = document.getElementById('bottom-nav-profile');
-    const profileDropdown = document.getElementById('profile-dropdown');
+// Fetch with auth helper
+window.fetchWithAuth = async function(url, options = {}) {
+    const token = getAuthToken();
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
     
-    // Desktop profile button click
-    if (profileBtn) {
-        profileBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const user = getCurrentUser();
-            
-            if (user) {
-                // User is logged in - toggle dropdown
-                if (profileDropdown) {
-                    const isVisible = profileDropdown.style.display === 'block';
-                    profileDropdown.style.display = isVisible ? 'none' : 'block';
-                    
-                    // Update dropdown content
-                    const nameEl = document.getElementById('profile-user-name');
-                    const emailEl = document.getElementById('profile-user-email');
-                    if (nameEl) nameEl.textContent = user.full_name || user.email;
-                    if (emailEl) emailEl.textContent = user.email;
-                }
-            } else {
-                // User not logged in - open auth modal
-                openAuthModal();
-            }
-        });
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // Mobile bottom nav profile button
-    if (bottomNavProfile) {
-        bottomNavProfile.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const user = getCurrentUser();
-            
-            if (user) {
-                // Redirect to profile page or show dropdown
-                window.location.href = 'profile.html';
-            } else {
-                // User not logged in - open auth modal
-                openAuthModal();
-            }
-        });
-    }
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (profileDropdown && !profileBtn?.contains(e.target) && !profileDropdown.contains(e.target)) {
-            profileDropdown.style.display = 'none';
-        }
-    });
-    
-    // Update profile button appearance based on login status
-    updateProfileButtonState();
-}
+    return fetch(url, { ...options, headers });
+};
 
-function updateProfileButtonState() {
-    const user = getCurrentUser();
-    const profileBtn = document.getElementById('profile-btn-desktop');
-    
-    if (profileBtn) {
-        if (user) {
-            profileBtn.classList.add('logged-in');
-            profileBtn.title = user.full_name || user.email;
-        } else {
-            profileBtn.classList.remove('logged-in');
-            profileBtn.title = 'Login / Sign Up';
-        }
-    }
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ══════════════════════════════════════════════════════════════════════════════
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupProfileButton);
-} else {
+function initialize() {
+    console.log('🚀 Initializing auth handler...');
+    restoreSession();
+    
+    // Try to setup profile button immediately
     setupProfileButton();
+    
+    // Also try again after a short delay (in case DOM isn't fully ready)
+    setTimeout(() => {
+        console.log('🔄 Retrying profile button setup...');
+        setupProfileButton();
+    }, 500);
+    
+    // And one more time after 1 second
+    setTimeout(() => {
+        console.log('🔄 Final profile button setup attempt...');
+        setupProfileButton();
+    }, 1000);
+    
+    console.log('✅ Auth handler initialized');
 }
 
-console.log('✅ Secure auth handler loaded - all operations via backend API');
-console.log('✅ Auth functions registered:', {
-    handleSignUp: typeof window.handleSignUp,
-    handleSignIn: typeof window.handleSignIn,
-    logout: typeof window.logout,
-    checkAuth: typeof window.checkAuth,
-    getCurrentUser: typeof window.getCurrentUser
-});
+// Run on DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+} else {
+    initialize();
+}
+
+console.log('✅ Auth handler loaded');

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Profile</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4a7c59;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #3d6849;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .error {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <h1>Create User Profile</h1>
+    <p>This will create your profile in the database.</p>
+    
+    <div id="message"></div>
+    
+    <form id="profile-form">
+        <div class="form-group">
+            <label>Email:</label>
+            <input type="email" id="email" required>
+        </div>
+        
+        <div class="form-group">
+            <label>First Name:</label>
+            <input type="text" id="first_name">
+        </div>
+        
+        <div class="form-group">
+            <label>Last Name:</label>
+            <input type="text" id="last_name">
+        </div>
+        
+        <div class="form-group">
+            <label>Phone:</label>
+            <input type="tel" id="phone">
+        </div>
+        
+        <button type="submit">Create Profile</button>
+    </form>
+    
+    <script>
+        const API_BASE = 'http://localhost:4000/api';
+        
+        // Pre-fill with logged in user data
+        window.addEventListener('load', () => {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+                try {
+                    const user = JSON.parse(userStr);
+                    document.getElementById('email').value = user.email || '';
+                } catch (e) {}
+            }
+        });
+        
+        document.getElementById('profile-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = 'Creating profile...';
+            messageDiv.className = 'message';
+            
+            const token = localStorage.getItem('token');
+            const userStr = localStorage.getItem('user');
+            
+            if (!token || !userStr) {
+                messageDiv.textContent = 'Please login first!';
+                messageDiv.className = 'message error';
+                return;
+            }
+            
+            const user = JSON.parse(userStr);
+            
+            const profileData = {
+                id: user.id,
+                email: document.getElementById('email').value,
+                first_name: document.getElementById('first_name').value,
+                last_name: document.getElementById('last_name').value,
+                phone: document.getElementById('phone').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(profileData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.textContent = '✅ Profile created successfully! Redirecting to profile page...';
+                    messageDiv.className = 'message success';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'profile.html';
+                    }, 2000);
+                } else {
+                    messageDiv.textContent = '❌ Error: ' + (result.error || 'Failed to create profile');
+                    messageDiv.className = 'message error';
+                }
+            } catch (error) {
+                messageDiv.textContent = '❌ Error: ' + error.message;
+                messageDiv.className = 'message error';
+            }
+        });
+    </script>
+</body>
+</html>

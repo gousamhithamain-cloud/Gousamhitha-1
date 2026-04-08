@@ -77,9 +77,9 @@ const getOrderById = asyncHandler(async (req, res) => {
 // POST /api/orders
 const createOrder = asyncHandler(async (req, res) => {
     const {
-        user_id, customer_name, customer_email, customer_phone,
-        delivery_address, city, pincode, order_notes,
-        subtotal, delivery_charge = 0, total_amount,
+        user_id, customer_name, email, phone,
+        address, delivery_address, city, pincode, notes,
+        subtotal, delivery_charge = 0, total,
         payment_method = 'COD', items
     } = req.body;
 
@@ -100,23 +100,22 @@ const createOrder = asyncHandler(async (req, res) => {
         }
     }
 
-    // Create order
+    // Create order - using actual database column names
     const { data: order, error: orderErr } = await supabase
         .from('orders')
         .insert({
             user_id,
             customer_name,
-            customer_email,
-            customer_phone,
-            delivery_address,
+            email,
+            phone,
+            address: address || delivery_address,
+            delivery_address: delivery_address || address,
             city,
             pincode,
-            order_notes,
-            subtotal,
-            delivery_charge,
-            total_amount,
+            notes,
+            total: total || (subtotal + delivery_charge),
             payment_method,
-            status: 'Pending',
+            order_status: 'Pending',
             payment_status: 'Pending'
         })
         .select()
@@ -126,14 +125,14 @@ const createOrder = asyncHandler(async (req, res) => {
         throw new AppError('Failed to create order', 500);
     }
 
-    // Create order items
+    // Create order items - using actual database column names
     const orderItems = items.map(item => ({
         order_id: order.id,
         product_id: item.product_id,
         product_name: item.product_name,
         quantity: item.quantity,
         price: item.price,
-        total: item.quantity * item.price
+        subtotal: item.quantity * item.price
     }));
 
     const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);

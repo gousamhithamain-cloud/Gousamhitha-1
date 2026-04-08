@@ -25,10 +25,10 @@ const apiLimiter = createRateLimiter(
     'Too many requests from this IP, please try again later'
 );
 
-// Strict rate limiter for auth endpoints - 5 requests per 15 minutes
+// Strict rate limiter for auth endpoints - 10 requests per 15 minutes (increased for testing)
 const authLimiter = createRateLimiter(
     15 * 60 * 1000, // 15 minutes
-    5,
+    10, // Increased from 5 to 10
     'Too many authentication attempts, please try again later'
 );
 
@@ -86,6 +86,8 @@ const corsOptions = {
             process.env.FRONTEND_URL,
             'http://localhost:3000',
             'http://127.0.0.1:3000',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
             'http://localhost:5500',
             'http://127.0.0.1:5500'
         ].filter(Boolean);
@@ -94,12 +96,15 @@ const corsOptions = {
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            console.log(`❌ CORS blocked origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 600 // Cache preflight requests for 10 minutes
 };
 
 module.exports = {

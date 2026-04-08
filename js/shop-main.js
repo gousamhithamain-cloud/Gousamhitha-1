@@ -13,5 +13,6 @@ import './toast.js';
 import './api-client.js';
 import './auth-handler.js';
 import './cart-count-updater.js';
+import './product-display-optimized-v2.js';
 
 console.log('✅ Shop page initialized');

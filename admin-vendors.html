@@ -121,50 +121,17 @@
     <!-- Scripts -->
     <script>
         let editingVendorId = null;
-        let vendorChannel = null;
-
-        // Wait for Supabase to be ready
         let isInitialized = false;
         
-        window.addEventListener('supabaseReady', async () => {
-            if (isInitialized) return;
-            isInitialized = true;
-            
-            console.log('? Supabase ready, loading vendors...');
-            await loadVendors();
-            setupRealtimeSubscription();
-        });
-        
-        // Also try after a delay
-        setTimeout(async () => {
-            if (window.supabase && !isInitialized) {
-                isInitialized = true;
-                await loadVendors();
-                setupRealtimeSubscription();
-            }
-        }, 1000);
+        console.log('🔧 Admin vendors page script loaded');
 
-        function setupRealtimeSubscription() {
-            vendorChannel = window.supabase
-                .channel('vendors-channel')
-                .on('postgres_changes', 
-                    { event: '*', schema: 'public', table: 'vendors' },
-                    (payload) => {
-                        console.log('Vendor change detected:', payload);
-                        loadVendors();
-                    }
-                )
-                .subscribe();
-            
-            console.log('Realtime subscription active for vendors');
-        }
-
+        // Define loadVendors function FIRST
         async function loadVendors() {
             const tbody = document.getElementById('vendors-table-body');
             
             // Check if already loading to prevent duplicates
             if (tbody.dataset.loading === 'true') {
-                console.log('?? Vendors already loading, skipping...');
+                console.log('⚠️ Vendors already loading, skipping...');
                 return;
             }
             
@@ -172,25 +139,43 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Loading vendors...</td></tr>';
             
             try {
-                const { data: vendors, error } = await window.supabase
-                    .from('vendors')
-                    .select('*')
-                    .order('created_at', { ascending: false });
+                console.log('📦 Fetching vendors from backend API...');
                 
-                if (error) {
-                    console.error('Error loading vendors:', error);
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading vendors</td></tr>';
-                    return;
+                const response = await fetch('http://localhost:4000/api/vendors');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                displayVendors(vendors || []);
+                const result = await response.json();
+                console.log('📥 API Response:', result);
+                
+                const vendors = result.vendors || result.data?.items || result.data || [];
+                
+                console.log('✅ Vendors loaded:', vendors.length);
+                displayVendors(vendors);
             } catch (error) {
                 console.error('Error loading vendors:', error);
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading vendors</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #d32f2f;">Error loading vendors: ' + error.message + '</td></tr>';
             } finally {
                 tbody.dataset.loading = 'false';
             }
         }
+        
+        // Load vendors immediately without waiting
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('📄 DOM loaded, loading vendors...');
+            await loadVendors();
+        });
+        
+        // Also try after a delay as fallback
+        setTimeout(async () => {
+            console.log('⏰ Timeout check - loading vendors if not already loaded');
+            const tbody = document.getElementById('vendors-table-body');
+            if (tbody && tbody.innerHTML.includes('Loading vendors')) {
+                await loadVendors();
+            }
+        }, 1000);
 
         function displayVendors(vendors) {
             const tbody = document.getElementById('vendors-table-body');

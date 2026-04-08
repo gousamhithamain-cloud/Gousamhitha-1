@@ -14,5 +14,6 @@ import './toast.js';
 import './api-client.js';
 import './auth-handler.js';
 import './cart-count-updater.js';
+import './product-display-optimized-v2.js';
 
 console.log('✅ Main entry point loaded - Home page initialized');

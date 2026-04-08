@@ -140,8 +140,7 @@ class UPIPaymentSystem {
     redirectToUPI(amount, type) {
         const validAmount = parseFloat(amount) || 0;
         
-        console.log('Redirecting 
-to UPI app with amount:', validAmount);
+        console.log('Redirecting to UPI app with amount:', validAmount);
         
         if (validAmount <= 0) {
             this.showMessage('Invalid amount for UPI payment', 'error');

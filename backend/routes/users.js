@@ -1,7 +1,10 @@
 const router = require('express').Router();
-const { getUserById, createUser, updateUser, deleteUser } = require('../controllers/userController');
+const { getUserById, createUser, updateUser, deleteUser, getCurrentUser } = require('../controllers/userController');
 const { validate, validateParams, schemas } = require('../middleware/validators');
 const { authenticate, requireRole, requireOwnership } = require('../middleware/auth');
+
+// GET /api/users/me — get current authenticated user
+router.get('/me', authenticate, getCurrentUser);
 
 // POST /api/users — create user profile
 router.post('/', validate(schemas.createUser), createUser);

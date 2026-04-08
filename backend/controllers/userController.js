@@ -2,6 +2,23 @@ const supabase = require('../config/supabase');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { successResponse, createdResponse } = require('../utils/response');
 
+// GET /api/users/me — get current authenticated user
+const getCurrentUser = asyncHandler(async (req, res) => {
+    const userId = req.user.id; // Set by authenticate middleware
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, phone, role, created_at, updated_at')
+        .eq('id', userId)
+        .single();
+
+    if (error || !data) {
+        throw new AppError('User not found', 404);
+    }
+
+    return successResponse(res, 200, data, 'Current user retrieved successfully');
+});
+
 // GET /api/users/:id
 const getUserById = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -117,4 +134,4 @@ const deleteUser = asyncHandler(async (req, res) => {
     return successResponse(res, 200, null, 'User deleted successfully');
 });
 
-module.exports = { getUserById, createUser, updateUser, deleteUser };
+module.exports = { getCurrentUser, getUserById, createUser, updateUser, deleteUser };
