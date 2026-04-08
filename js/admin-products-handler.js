@@ -65,13 +65,30 @@ function displayProducts(products) {
     // Debug first product
     console.log('🔍 FIRST PRODUCT IN DISPLAY:', products[0]);
     console.log('🔍 PRODUCT FIELDS:', Object.keys(products[0]));
+    if (products[0]) {
+        console.log('🖼️ IMAGE FIELD CHECK:', {
+            image_url: products[0].image_url,
+            image: products[0].image,
+            imageUrl: products[0].imageUrl,
+            type: typeof products[0].image_url,
+            length: products[0].image_url ? products[0].image_url.length : 0
+        });
+    }
     
-    tbody.innerHTML = products.map(product => `
+    tbody.innerHTML = products.map(product => {
+        // Get image URL with multiple fallbacks
+        const imageUrl = product.image_url || product.image || product.imageUrl || 'images/placeholder.png';
+        
+        // Log each product's image
+        console.log(`🖼️ Product "${product.name}" using image:`, imageUrl.substring(0, 100));
+        
+        return `
         <tr>
             <td>
-                <img src="${product.image_url || 'images/placeholder.png'}" 
+                <img src="${imageUrl}" 
                      alt="${product.name}" 
-                     style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px;">
+                     onerror="this.onerror=null; this.src='images/placeholder.png'; console.error('❌ Failed to load image for ${product.name}');"
+                     style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; background: #f5f5f5;">
             </td>
             <td>${product.name || 'N/A'}</td>
             <td>${product.category || 'N/A'}</td>
@@ -87,7 +104,8 @@ function displayProducts(products) {
                 <button class="btn-delete" onclick="deleteProduct('${product.id}')">Delete</button>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -127,6 +145,8 @@ function closeEditPanel() {
     document.getElementById('edit-overlay').classList.remove('active');
     document.getElementById('edit-panel').classList.remove('active');
     editingProductId = null;
+    window.editImageBase64 = '';
+    document.getElementById('edit-image-preview').innerHTML = '';
 }
 
 async function saveProductEdit(event) {
@@ -134,18 +154,60 @@ async function saveProductEdit(event) {
     
     console.log('💾 Saving product...');
     
-    const productData = {
-        name: document.getElementById('edit-name').value,
-        category: document.getElementById('edit-category').value,
-        price: parseFloat(document.getElementById('edit-price').value),
-        stock: parseInt(document.getElementById('edit-stock').value),
-        unit: document.getElementById('edit-unit').value,
-        unit_quantity: parseFloat(document.getElementById('edit-unit-quantity').value),
-        display_unit: document.getElementById('edit-display-unit').value,
-        in_stock: parseInt(document.getElementById('edit-stock').value) > 0
-    };
+    // Get raw values from form
+    const nameValue = document.getElementById('edit-name').value.trim();
+    const categoryValue = document.getElementById('edit-category').value.trim();
+    const priceValue = document.getElementById('edit-price').value.trim();
+    const stockValue = document.getElementById('edit-stock').value.trim();
+    const unitValue = document.getElementById('edit-unit').value.trim();
+    const unitQuantityValue = document.getElementById('edit-unit-quantity').value.trim();
+    const displayUnitValue = document.getElementById('edit-display-unit').value.trim();
     
-    console.log('📤 Product data:', productData);
+    // Construct clean payload with proper types
+    const productData = {};
+    
+    // Required string fields
+    if (nameValue) productData.name = nameValue;
+    if (categoryValue) productData.category = categoryValue;
+    
+    // Required numeric fields - convert to numbers
+    if (priceValue) {
+        const price = Number(priceValue);
+        if (!isNaN(price) && price > 0) {
+            productData.price = price;
+        }
+    }
+    
+    if (stockValue) {
+        const stock = Number(stockValue);
+        if (!isNaN(stock) && stock >= 0) {
+            productData.stock = stock;
+        }
+    }
+    
+    // Optional string field
+    if (unitValue) productData.unit = unitValue;
+    
+    // Optional numeric field - only include if has value
+    if (unitQuantityValue) {
+        const unitQuantity = Number(unitQuantityValue);
+        if (!isNaN(unitQuantity) && unitQuantity > 0) {
+            productData.unit_quantity = unitQuantity;
+        }
+    }
+    
+    // Optional string field
+    if (displayUnitValue) productData.display_unit = displayUnitValue;
+    
+    // Add image if uploaded
+    if (window.editImageBase64) {
+        productData.image_url = window.editImageBase64;
+    }
+    
+    // DO NOT send in_stock - it's a generated column in the database
+    
+    console.log('📤 Clean product data:', productData);
+    console.log('📤 Editing product ID:', editingProductId);
     
     try {
         await AdminProductsAPI.update(editingProductId, productData);

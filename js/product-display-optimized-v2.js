@@ -37,16 +37,34 @@
     async function fetchProducts(params) {
         var qs = params ? '?' + new URLSearchParams(params).toString() : '';
         var controller = new AbortController();
-        var timeout = setTimeout(function () { controller.abort(); }, 8000);
+        var timeout = setTimeout(function () { controller.abort(); }, 15000); // Increased to 15 seconds
 
         try {
-            var res = await fetch(API_BASE + '/products' + qs, { signal: controller.signal });
+            console.log('[ProductOptimizer] Fetching from:', API_BASE + '/products' + qs);
+            var res = await fetch(API_BASE + '/products' + qs, { 
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
             clearTimeout(timeout);
-            if (!res.ok) throw new Error('Server error ' + res.status);
+            
+            console.log('[ProductOptimizer] Response status:', res.status);
+            
+            if (!res.ok) {
+                var errorText = await res.text();
+                console.error('[ProductOptimizer] Error response:', errorText);
+                throw new Error('Server error ' + res.status);
+            }
+            
             var json = await res.json();
-            return json.products || [];
+            console.log('[ProductOptimizer] Response data:', json);
+            
+            // Handle nested response structure: data.items contains the products array
+            return (json.data && json.data.items) || json.products || [];
         } catch (err) {
             clearTimeout(timeout);
+            console.error('[ProductOptimizer] Fetch error:', err);
             if (err.name === 'AbortError') throw new Error('Request timed out — please refresh');
             throw err;
         }
@@ -70,7 +88,7 @@
             var safeName = (p.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
             return '<div class="product-card">' +
-                '<img src="' + img + '" alt="' + p.name + '" loading="lazy"' +
+                '<img src="' + img + '" alt="' + p.name + '"' +
                 ' onerror="this.onerror=null;this.src=\'images/placeholder.jpg\'">' +
                 '<h3 style="margin:.8rem 0 .3rem;font-size:1.1rem;color:#333;">' + p.name + '</h3>' +
                 (unit ? '<p style="color:#666;font-size:.85rem;margin:.2rem 0;font-weight:500;">' + unit + '</p>' : '') +
@@ -152,22 +170,35 @@
 
     // ── Add to cart — via backend API ─────────────────────────────────────────
     async function addToCart(productId, productName, price, maxStock) {
-        // Get current user from localStorage (set by AuthAPI.signin)
+        console.log('🛒 Add to cart called for:', productName);
+        
+        // Get current user from localStorage - check both possible keys
         var user = null;
         try {
-            var raw = localStorage.getItem('auth_user');
+            var raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
+            console.log('📦 User data from localStorage:', raw ? 'Found' : 'Not found');
             if (raw) user = JSON.parse(raw);
-        } catch (e) {}
+        } catch (e) {
+            console.error('❌ Error parsing user data:', e);
+        }
 
         // Fallback: try Supabase session if still present
         if (!user && window.supabase) {
             try {
                 var r = await window.supabase.auth.getUser();
-                if (!r.error && r.data && r.data.user) user = r.data.user;
-            } catch (e) {}
+                if (!r.error && r.data && r.data.user) {
+                    user = r.data.user;
+                    console.log('✅ Got user from Supabase session');
+                }
+            } catch (e) {
+                console.error('❌ Supabase getUser error:', e);
+            }
         }
 
+        console.log('👤 User check result:', user ? `Logged in as ${user.email}` : 'Not logged in');
+
         if (!user) {
+            console.log('❌ No user found - showing login prompt');
             if (typeof showToast === 'function') showToast('Please login to add items to cart', 'error');
             var m = document.getElementById('auth-modal');
             if (m) m.classList.add('active');
@@ -178,18 +209,38 @@
         var quantity = qtyEl ? parseInt(qtyEl.value) : 1;
 
         try {
-            var token = localStorage.getItem('auth_token') || '';
+            // Check both possible token keys
+            var token = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+            console.log('🔑 Token check:', token ? `Found (${token.length} chars)` : 'Not found');
+            
+            if (!token) {
+                throw new Error('No authentication token found. Please login again.');
+            }
+            
+            console.log('📤 Sending add to cart request...');
             var res = await fetch(API_BASE + '/cart', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ user_id: user.id, product_id: productId, quantity: quantity })
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': 'Bearer ' + token 
+                },
+                body: JSON.stringify({ 
+                    user_id: user.id, 
+                    product_id: productId, 
+                    quantity: quantity 
+                })
             });
+            
             var data = await res.json();
+            console.log('📥 Add to cart response:', data);
+            
             if (!res.ok) throw new Error(data.error || 'Failed to add to cart');
 
             if (typeof showToast === 'function') showToast(quantity + ' x ' + productName + ' added to cart!', 'success');
             if (qtyEl) qtyEl.value = 1;
             if (typeof updateCartCount === 'function') updateCartCount();
+            
+            console.log('✅ Item added to cart successfully');
         } catch (e) {
             console.error('[ProductOptimizer.addToCart]', e.message);
             if (typeof showToast === 'function') showToast(e.message || 'Error adding to cart', 'error');
@@ -215,10 +266,19 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     var _done = false;
+    var _loading = false;
+    
     function _init() {
-        if (_done) return;
+        if (_done || _loading) {
+            console.log('[ProductOptimizer] Already initialized or loading, skipping...');
+            return;
+        }
         _done = true;
-        loadProductsOptimized();
+        _loading = true;
+        
+        loadProductsOptimized().finally(function() {
+            _loading = false;
+        });
     }
 
     if (document.readyState === 'loading') {

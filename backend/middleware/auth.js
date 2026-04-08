@@ -22,32 +22,65 @@ const { AppError } = require('./errorHandler');
  */
 const authenticate = async (req, res, next) => {
     try {
+        console.log('🔐 AUTHENTICATE - START');
+        console.log('📍 Path:', req.path);
+        console.log('🔑 Auth Header:', req.headers.authorization ? 'Present' : 'Missing');
+        
         // Extract token from Authorization header
         const authHeader = req.headers.authorization;
         
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('❌ No token provided');
             throw new AppError('No authentication token provided', 401);
         }
 
         const token = authHeader.replace('Bearer ', '');
+        console.log('✅ Token extracted (length):', token.length);
 
         // Verify token with Supabase Auth
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
         if (error || !user) {
+            console.log('❌ Token verification failed:', error?.message);
             throw new AppError('Invalid or expired token', 401);
         }
 
+        console.log('✅ Token verified for user:', user.email);
+
         // Fetch user details from database (including role)
-        const { data: userProfile, error: profileError } = await supabase
+        let { data: userProfile, error: profileError } = await supabase
             .from('users')
             .select('id, email, first_name, last_name, role')
             .eq('id', user.id)
             .single();
 
+        // If profile doesn't exist, create it automatically
         if (profileError || !userProfile) {
-            throw new AppError('User profile not found', 401);
+            console.log('⚠️ User profile not found, creating one for:', user.email);
+            
+            const { data: newProfile, error: createError } = await supabase
+                .from('users')
+                .upsert({
+                    id: user.id,
+                    email: user.email,
+                    first_name: user.user_metadata?.full_name?.split(' ')[0] || 'User',
+                    last_name: user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
+                    phone: user.user_metadata?.phone || '',
+                    role: user.email === 'admin@123.com' ? 'admin' : 'customer'
+                }, { onConflict: 'id' })
+                .select('id, email, first_name, last_name, role')
+                .single();
+
+            if (createError || !newProfile) {
+                console.error('❌ Failed to create user profile:', createError);
+                throw new AppError('Failed to create user profile', 500);
+            }
+
+            userProfile = newProfile;
+            console.log('✅ User profile created successfully');
         }
+
+        console.log('✅ User profile loaded:', userProfile.email, 'Role:', userProfile.role);
 
         // Attach user to request object
         req.user = {
@@ -58,9 +91,11 @@ const authenticate = async (req, res, next) => {
             role: userProfile.role || 'customer'
         };
 
+        console.log('✅ AUTHENTICATE - SUCCESS');
         // Continue to next middleware/route handler
         next();
     } catch (error) {
+        console.error('❌ AUTHENTICATE - ERROR:', error.message);
         // Pass error to global error handler
         next(error);
     }

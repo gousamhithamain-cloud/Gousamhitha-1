@@ -95,10 +95,10 @@
         // Optimize images
         optimizeImages() {
             document.querySelectorAll('img').forEach(img => {
-                // Add loading="lazy" if not present
-                if (!img.hasAttribute('loading')) {
-                    img.setAttribute('loading', 'lazy');
-                }
+                // Skip adding loading="lazy" for product images to load all at once
+                // if (!img.hasAttribute('loading')) {
+                //     img.setAttribute('loading', 'lazy');
+                // }
                 
                 // Add error handling if not present
                 if (!img.onerror) {

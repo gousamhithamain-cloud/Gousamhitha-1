@@ -84,7 +84,11 @@ const schemas = {
             }),
         image_url: Joi.string().uri().allow('', null).optional(),
         unit: Joi.string().trim().max(50).allow('', null).optional(),
-        unit_quantity: Joi.string().trim().max(50).allow('', null).optional(),
+        unit_quantity: Joi.number().positive().allow(null).optional()
+            .messages({
+                'number.base': 'Unit quantity must be a number',
+                'number.positive': 'Unit quantity must be positive'
+            }),
         display_unit: Joi.string().trim().max(100).allow('', null).optional()
     }),
 
@@ -95,7 +99,11 @@ const schemas = {
         stock: Joi.number().integer().min(0).optional(),
         image_url: Joi.string().uri().allow('', null).optional(),
         unit: Joi.string().trim().max(50).allow('', null).optional(),
-        unit_quantity: Joi.string().trim().max(50).allow('', null).optional(),
+        unit_quantity: Joi.number().positive().allow(null).optional()
+            .messages({
+                'number.base': 'Unit quantity must be a number',
+                'number.positive': 'Unit quantity must be positive'
+            }),
         display_unit: Joi.string().trim().max(100).allow('', null).optional(),
         in_stock: Joi.boolean().optional()
     }).min(1), // At least one field must be present

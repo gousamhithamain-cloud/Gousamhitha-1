@@ -6,16 +6,55 @@ const { successResponse, createdResponse, batchResponse } = require('../utils/re
 const getCart = asyncHandler(async (req, res) => {
     const { userId } = req.params;
 
-    const { data, error } = await supabase
+    console.log('🛒 GET CART - User ID:', userId);
+
+    // Step 1: Get cart items
+    let { data: cartItems, error: cartError } = await supabase
         .from('cart')
-        .select('id, product_id, quantity, products(id, name, price, image_url, stock, display_unit, unit, unit_quantity)')
+        .select('id, product_id, quantity')
         .eq('user_id', userId);
 
-    if (error) {
-        throw new AppError('Failed to fetch cart', 500);
+    if (cartError) {
+        console.error('❌ CART FETCH ERROR:', JSON.stringify(cartError, null, 2));
+        throw new AppError('Failed to fetch cart: ' + cartError.message, 500);
     }
 
-    return batchResponse(res, 200, data || [], (data || []).length, 'Cart retrieved successfully');
+    console.log('✅ Cart items fetched:', cartItems ? cartItems.length : 0);
+
+    // If no items, return empty array
+    if (!cartItems || cartItems.length === 0) {
+        return batchResponse(res, 200, [], 0, 'Cart is empty');
+    }
+
+    // Step 2: Get product details for each cart item
+    const productIds = cartItems.map(item => item.product_id);
+    
+    const { data: products, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, price, image_url, stock, display_unit, unit, unit_quantity')
+        .in('id', productIds);
+
+    if (productsError) {
+        console.error('❌ PRODUCTS FETCH ERROR:', JSON.stringify(productsError, null, 2));
+        throw new AppError('Failed to fetch product details: ' + productsError.message, 500);
+    }
+
+    console.log('✅ Products fetched:', products ? products.length : 0);
+
+    // Step 3: Combine cart items with product details
+    const cartWithProducts = cartItems.map(cartItem => {
+        const product = products.find(p => p.id === cartItem.product_id);
+        return {
+            id: cartItem.id,
+            product_id: cartItem.product_id,
+            quantity: cartItem.quantity,
+            products: product || null
+        };
+    });
+
+    console.log('✅ Cart with products prepared:', cartWithProducts.length, 'items');
+
+    return batchResponse(res, 200, cartWithProducts, cartWithProducts.length, 'Cart retrieved successfully');
 });
 
 // POST /api/cart  — add or update item

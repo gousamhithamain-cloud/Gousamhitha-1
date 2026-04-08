@@ -51,26 +51,63 @@
         }
         
         async getCartItemCount() {
-            if (!window.supabase) {
-                return 0;
-            }
-            
             try {
-                // Get user from localStorage or Supabase auth
+                // Get user from localStorage - check both possible keys
                 let user = null;
-                try { const raw = localStorage.getItem('auth_user'); if (raw) user = JSON.parse(raw); } catch(e){}
-                if (!user && window.supabase) {
-                    try { const r = await window.supabase.auth.getUser(); if (!r.error && r.data?.user) user = r.data.user; } catch(e){}
+                try { 
+                    const raw = localStorage.getItem('user') || localStorage.getItem('auth_user'); 
+                    if (raw) user = JSON.parse(raw); 
+                } catch(e){
+                    console.error('Error parsing user:', e);
                 }
-                if (!user) return 0;
                 
-                // Get cart count via backend API
-                const token = localStorage.getItem('auth_token') || '';
-                const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/cart/${user.id}`, {
-                    headers: { 'Authorization': 'Bearer ' + token }
+                // Fallback: try Supabase auth if still present
+                if (!user && window.supabase) {
+                    try { 
+                        const r = await window.supabase.auth.getUser(); 
+                        if (!r.error && r.data?.user) user = r.data.user; 
+                    } catch(e){
+                        console.error('Supabase getUser error:', e);
+                    }
+                }
+                
+                if (!user) {
+                    console.log('No user logged in - cart count is 0');
+                    return 0;
+                }
+                
+                // Get cart count via backend API - check both token keys
+                const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+                
+                if (!token) {
+                    console.log('No token found - cart count is 0');
+                    return 0;
+                }
+                
+                const apiBase = window.API_BASE_URL || 'http://localhost:4000/api';
+                console.log(`Fetching cart for user ${user.id} from ${apiBase}/cart/${user.id}`);
+                
+                const res = await fetch(`${apiBase}/cart/${user.id}`, {
+                    headers: { 
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
                 });
+                
+                if (!res.ok) {
+                    console.error('Cart fetch failed:', res.status, res.statusText);
+                    return 0;
+                }
+                
                 const json = await res.json();
-                return (json.cart || []).reduce((sum, item) => sum + item.quantity, 0);
+                console.log('Cart API response:', json);
+                
+                // Handle different response structures
+                const cartItems = json.data?.items || json.data || json.cart || [];
+                const totalCount = cartItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+                
+                console.log(`Cart has ${cartItems.length} items, total quantity: ${totalCount}`);
+                return totalCount;
                 
             } catch (error) {
                 console.error('Error getting cart count:', error);

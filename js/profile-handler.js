@@ -132,52 +132,61 @@ if (!window.updateProfileUI) {
                 profileBtn.style.pointerEvents = 'auto';
             }
             
-            // Wait for Supabase
-            if (!window.supabase || !window.supabase.auth) {
-                console.log('⏳ Waiting for Supabase to load...');
-                setTimeout(window.updateProfileUI, 500);
-                return;
-            }
-            
-            // Check if user is logged in via Supabase with error handling
+            // Check if user is logged in via localStorage first
             let user = null;
             try {
-                const { data: { user: authUser }, error } = await window.supabase.auth.getUser();
-                
-                if (error) {
-                    console.warn('⚠️ Error getting user from auth:', error.message);
-                    if (profileBtn) window.showDefaultProfileIcon(profileBtn);
-                    if (mobileProfileBtn) window.showDefaultMobileProfileIcon(mobileProfileBtn);
-                    return;
+                const userStr = localStorage.getItem('user');
+                if (userStr) {
+                    user = JSON.parse(userStr);
+                    console.log('✅ User found in localStorage:', user.email);
                 }
-                
-                user = authUser;
-            } catch (authError) {
-                console.warn('⚠️ Auth check failed:', authError.message);
+            } catch (e) {
+                console.error('❌ Error parsing user from localStorage:', e);
+            }
+            
+            // Fallback to Supabase if available and no user in localStorage
+            if (!user && window.supabase && window.supabase.auth) {
+                try {
+                    const { data: { user: authUser }, error } = await window.supabase.auth.getUser();
+                    
+                    if (error) {
+                        console.warn('⚠️ Error getting user from Supabase:', error.message);
+                    } else if (authUser) {
+                        user = authUser;
+                        console.log('✅ User found in Supabase:', user.email);
+                    }
+                } catch (e) {
+                    console.error('❌ Supabase auth error:', e);
+                }
+            }
+            
+            // Show default icons if no user found
+            if (!user) {
+                console.log('ℹ️ No user logged in');
                 if (profileBtn) window.showDefaultProfileIcon(profileBtn);
                 if (mobileProfileBtn) window.showDefaultMobileProfileIcon(mobileProfileBtn);
                 return;
             }
-        
-            if (user) {
-                console.log('✅ User is logged in, updating profile UI for:', user.email);
-                
-                // Get user data via backend API
-                let userData = null;
-                try {
-                    const token = localStorage.getItem('auth_token') || '';
-                    const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/users/${user.id}`, {
-                        headers: { 'Authorization': 'Bearer ' + token }
-                    });
-                    if (res.ok) { const json = await res.json(); userData = json.user; }
-                } catch (e) { console.warn('Could not fetch user data:', e.message); }
-                
-                const fullName = userData ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() : '';
-                const displayName = fullName || user.email || 'User';
-                const initial = displayName.charAt(0).toUpperCase();
-                
-                // Update desktop profile button
-                if (profileBtn) {
+            
+            // User is logged in - continue with profile setup
+            console.log('✅ User is logged in, updating profile UI for:', user.email);
+            
+            // Get user data via backend API
+            let userData = null;
+            try {
+                const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+                const res = await fetch(`${window.API_BASE_URL || 'http://localhost:4000/api'}/users/${user.id}`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) { const json = await res.json(); userData = json.user; }
+            } catch (e) { console.warn('Could not fetch user data:', e.message); }
+            
+            const fullName = userData ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() : '';
+            const displayName = fullName || user.email || 'User';
+            const initial = displayName.charAt(0).toUpperCase();
+            
+            // Update desktop profile button
+            if (profileBtn) {
                     profileBtn.innerHTML = `
                         <div style="
                             width: 36px;
@@ -258,11 +267,7 @@ if (!window.updateProfileUI) {
                 if (window.profileUpdateLogCount % 10 === 1) {
                     console.log('✅ Profile UI updated - User logged in as:', displayName);
                 }
-            } else {
-                console.log('ℹ️ User not logged in, showing default profile icons');
-                if (profileBtn) window.showDefaultProfileIcon(profileBtn);
-                if (mobileProfileBtn) window.showDefaultMobileProfileIcon(mobileProfileBtn);
-            }
+                
         } catch (error) {
             console.error('❌ Error updating profile UI:', error);
             // Fallback to default icons on any error

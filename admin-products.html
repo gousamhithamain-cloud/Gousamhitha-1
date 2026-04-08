@@ -115,6 +115,12 @@
                     <input type="text" id="edit-display-unit">
                 </div>
                 
+                <div class="form-group">
+                    <label>Product Image</label>
+                    <input type="file" id="edit-image" accept="image/*" onchange="previewEditImage(event)">
+                    <div id="edit-image-preview" style="margin-top: 10px;"></div>
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">Save Changes</button>
                     <button type="button" class="btn-secondary" onclick="closeEditPanel()">Cancel</button>
@@ -124,7 +130,47 @@
     </div>
 
     <!-- Scripts -->
+    <script src="js/image-compressor.js"></script>
     <script src="js/admin-api-client.js"></script>
     <script src="js/admin-products-handler.js"></script>
+    
+    <script>
+        // Image preview for edit form with compression
+        let editImageBase64 = '';
+        
+        function previewEditImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const preview = document.getElementById('edit-image-preview');
+            preview.innerHTML = '<div style="padding: 0.5rem; color: #666; font-size: 0.9rem;">Compressing image...</div>';
+            
+            // Compress image
+            if (window.ImageCompressor) {
+                window.ImageCompressor.compress(file, {
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    quality: 0.8
+                }).then(compressedBase64 => {
+                    window.editImageBase64 = compressedBase64;
+                    preview.innerHTML = `<img src="${compressedBase64}" alt="Preview" style="max-width: 200px; border-radius: 8px;">`;
+                }).catch(error => {
+                    console.error('Image compression failed:', error);
+                    preview.innerHTML = '<div style="padding: 0.5rem; color: #d32f2f; font-size: 0.9rem;">Failed to compress image</div>';
+                });
+            } else {
+                // Fallback
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    window.editImageBase64 = e.target.result;
+                    preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="max-width: 200px; border-radius: 8px;">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        window.previewEditImage = previewEditImage;
+        window.editImageBase64 = '';
+    </script>
 </body>
 </html>

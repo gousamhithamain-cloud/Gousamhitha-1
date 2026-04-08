@@ -8,7 +8,7 @@ const getProducts = asyncHandler(async (req, res) => {
 
     let query = supabase
         .from('products')
-        .select('*');
+        .select('id, name, category, subcategory, price, stock, unit, unit_quantity, display_unit, in_stock, created_at, updated_at');
 
     // Apply filters
     if (category !== undefined && category !== '') {
@@ -38,12 +38,15 @@ const getProducts = asyncHandler(async (req, res) => {
         throw new AppError('Failed to fetch products', 500);
     }
 
-    console.log('Products fetched:', data ? data.length : 0);
-    if (data && data.length > 0) {
-        console.log('First product:', data[0]);
-    }
+    // Add placeholder image URLs for products without external URLs
+    const productsWithImages = (data || []).map(product => ({
+        ...product,
+        image_url: 'images/placeholder.png' // Use placeholder instead of base64
+    }));
 
-    return batchResponse(res, 200, data || [], count || 0, 'Products fetched successfully');
+    console.log('Products fetched:', productsWithImages ? productsWithImages.length : 0);
+
+    return batchResponse(res, 200, productsWithImages, count || 0, 'Products fetched successfully');
 });
 
 // GET /api/products/:id
@@ -106,21 +109,30 @@ const updateProduct = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    console.log('🔍 UPDATE PRODUCT - START');
+    console.log('📋 Product ID:', id);
+    console.log('📦 Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('👤 User:', req.user);
+
     // Prevent overwriting id
     delete updates.id;
+    
+    // CRITICAL: Remove in_stock - it's a generated column in the database
+    delete updates.in_stock;
+
+    console.log('✅ After removing id and in_stock:', JSON.stringify(updates, null, 2));
 
     // Validate business logic
     if (updates.price !== undefined && updates.price <= 0) {
+        console.log('❌ Validation failed: Price must be greater than 0');
         throw new AppError('Price must be greater than 0', 400);
     }
     if (updates.stock !== undefined && updates.stock < 0) {
+        console.log('❌ Validation failed: Stock cannot be negative');
         throw new AppError('Stock cannot be negative', 400);
     }
 
-    // Auto-update in_stock based on stock
-    if (updates.stock !== undefined) {
-        updates.in_stock = updates.stock > 0;
-    }
+    console.log('📤 Final updates to send to DB:', JSON.stringify(updates, null, 2));
 
     const { data, error } = await supabase
         .from('products')
@@ -130,11 +142,19 @@ const updateProduct = asyncHandler(async (req, res) => {
         .single();
 
     if (error) {
+        console.error('❌ SUPABASE UPDATE ERROR:', JSON.stringify(error, null, 2));
+        console.error('❌ Error code:', error.code);
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
+        console.error('❌ Error hint:', error.hint);
+        
         if (error.code === 'PGRST116') {
             throw new AppError('Product not found', 404);
         }
         throw new AppError('Failed to update product', 500);
     }
+
+    console.log('✅ UPDATE SUCCESS:', JSON.stringify(data, null, 2));
 
     return successResponse(res, 200, data, 'Product updated successfully');
 });

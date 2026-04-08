@@ -17,6 +17,7 @@
     
     <!-- Load Supabase FIRST -->
     <script src="js/supabase-init.js"></script>
+    <script src="js/image-compressor.js"></script>
     
     <script src="js/admin-mobile.js"></script>
     <script src="js/admin-mobile-table-fix.js"></script>
@@ -223,13 +224,32 @@
             const file = event.target.files[0];
             if (!file) return;
             
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                window.imageBase64 = e.target.result;
-                const preview = document.getElementById('image-preview');
-                preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="max-width: 300px; border-radius: 8px; margin-top: 10px;">`;
-            };
-            reader.readAsDataURL(file);
+            // Show loading message
+            const preview = document.getElementById('image-preview');
+            preview.innerHTML = '<div style="padding: 1rem; color: #666;">Compressing image...</div>';
+            
+            // Compress image before preview
+            if (window.ImageCompressor) {
+                window.ImageCompressor.compress(file, {
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    quality: 0.8
+                }).then(compressedBase64 => {
+                    window.imageBase64 = compressedBase64;
+                    preview.innerHTML = `<img src="${compressedBase64}" alt="Preview" style="max-width: 300px; border-radius: 8px; margin-top: 10px;">`;
+                }).catch(error => {
+                    console.error('Image compression failed:', error);
+                    preview.innerHTML = '<div style="padding: 1rem; color: #d32f2f;">Failed to compress image</div>';
+                });
+            } else {
+                // Fallback to uncompressed if compressor not loaded
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    window.imageBase64 = e.target.result;
+                    preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="max-width: 300px; border-radius: 8px; margin-top: 10px;">`;
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
         // Handle Add Product form submission

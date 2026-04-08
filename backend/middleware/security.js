@@ -89,15 +89,23 @@ const corsOptions = {
             'http://localhost:5173',
             'http://127.0.0.1:5173',
             'http://localhost:5500',
-            'http://127.0.0.1:5500'
+            'http://127.0.0.1:5500',
+            'http://localhost:8080',
+            'http://127.0.0.1:8080'
         ].filter(Boolean);
 
-        // Allow requests with no origin (mobile apps, Postman, etc.)
+        // Allow requests with no origin (mobile apps, Postman, etc.) or from allowed origins
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            console.log(`❌ CORS blocked origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
+            console.log(`⚠️ CORS request from origin: ${origin}`);
+            // In development, allow all origins
+            if (process.env.NODE_ENV !== 'production') {
+                callback(null, true);
+            } else {
+                console.log(`❌ CORS blocked origin: ${origin}`);
+                callback(new Error('Not allowed by CORS'));
+            }
         }
     },
     credentials: true,

@@ -1,25 +1,14 @@
 @echo off
-echo ========================================
-echo Restarting Backend Server
-echo ========================================
-echo.
-
+echo Restarting Backend Server...
 cd backend
-
-echo Killing existing Node processes...
+echo.
+echo Stopping any existing Node processes...
 taskkill /F /IM node.exe 2>nul
-
+timeout /t 2 /nobreak >nul
 echo.
 echo Starting backend server...
-echo.
-
 start cmd /k "node server.js"
-
 echo.
-echo ========================================
-echo Backend server started in new window
-echo ========================================
-echo.
-echo Server should be running on http://localhost:4000
+echo Backend server started in new window!
 echo.
 pause

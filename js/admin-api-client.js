@@ -73,6 +73,9 @@ async function adminFetch(endpoint, options = {}) {
     const url = endpoint.startsWith('http') ? endpoint : `${ADMIN_API_BASE}${endpoint}`;
     
     console.log(`📡 API Call: ${options.method || 'GET'} ${url}`);
+    if (options.body) {
+        console.log(`📤 Request Body:`, JSON.parse(options.body));
+    }
     
     const response = await fetch(url, {
         ...options,
@@ -84,7 +87,16 @@ async function adminFetch(endpoint, options = {}) {
     console.log(`📥 API Response (${response.status}):`, data);
     
     if (!response.ok) {
-        throw new Error(data.error || data.message || `HTTP ${response.status}`);
+        const errorMsg = data.error || data.message || `HTTP ${response.status}`;
+        console.error(`❌ API Error Details:`, {
+            status: response.status,
+            statusText: response.statusText,
+            error: data.error,
+            message: data.message,
+            details: data.details,
+            fullResponse: data
+        });
+        throw new Error(errorMsg);
     }
     
     return data;
