@@ -155,37 +155,19 @@
     }
     
     // Handle profile click from bottom navigation
-    window.handleMobileProfileClick = async function() {
+    window.handleMobileProfileClick = function() {
         console.log('🖱️ Mobile profile button clicked!');
         
-        // Wait for Supabase to be ready
-        if (!window.supabase || !window.supabase.auth) {
-            console.log('⏳ Waiting for Supabase...');
-            setTimeout(window.handleMobileProfileClick, 500);
-            return;
-        }
+        // Use the existing auth system (localStorage-based)
+        const loggedIn = typeof window.isLoggedIn === 'function'
+            ? window.isLoggedIn()
+            : !!(localStorage.getItem('token') && localStorage.getItem('user'));
         
-        try {
-            // Check if user is logged in via Supabase
-            const { data: { user }, error } = await window.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Error checking auth status:', error);
-                openMobileAuthModal();
-                return;
-            }
-            
-            if (user) {
-                console.log('✅ User is logged in:', user.email);
-                console.log('🔄 Redirecting to profile page...');
-                window.location.href = 'profile.html';
-            } else {
-                console.log('ℹ️ User not logged in, showing auth modal');
-                openMobileAuthModal();
-            }
-        } catch (error) {
-            console.error('❌ Error checking user status:', error);
-            // On any error, show auth modal as fallback
+        if (loggedIn) {
+            console.log('✅ User is logged in - redirecting to profile page...');
+            window.location.href = 'profile.html';
+        } else {
+            console.log('ℹ️ User not logged in, showing auth modal');
             openMobileAuthModal();
         }
     };
@@ -199,7 +181,6 @@
             if (authModal) {
                 console.log('✅ Opening auth modal...');
                 authModal.classList.add('active');
-                authModal.style.display = 'flex';
             } else {
                 console.error('❌ Auth modal not found!');
             }
