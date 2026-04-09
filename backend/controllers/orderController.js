@@ -7,22 +7,19 @@ const VALID_STATUSES = ['Pending', 'Packed', 'Shipped', 'Delivered', 'Cancelled'
 // GET /api/orders  (admin — all orders)
 const getAllOrders = asyncHandler(async (req, res) => {
     const { page = 1, limit = 20, status, sortBy = 'created_at' } = req.query;
+    const offset = (page - 1) * limit;
 
     let query = supabase
         .from('orders')
-        .select('*, order_items(*)');
+        .select('*, order_items(*)', { count: 'exact' })
+        .order(sortBy, { ascending: sortBy === 'customer_name' })
+        .range(offset, offset + limit - 1);
 
     if (status && VALID_STATUSES.includes(status)) {
         query = query.eq('order_status', status);
     }
 
-    // Get total count
-    const { count } = await query.select('id', { count: 'exact', head: true });
-
-    // Apply pagination and sorting
-    const offset = (page - 1) * limit;
-    query = query.order(sortBy, { ascending: sortBy === 'customer_name' });
-    const { data, error } = await query.range(offset, offset + limit - 1);
+    const { data, error, count } = await query;
 
     if (error) {
         throw new AppError('Failed to fetch orders', 500);
@@ -35,23 +32,22 @@ const getAllOrders = asyncHandler(async (req, res) => {
 const getUserOrders = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const { page = 1, limit = 10 } = req.query;
-
-    let query = supabase
-        .from('orders')
-        .select('*, order_items(*)');
-
-    query = query.eq('user_id', userId);
-
-    // Get total count
-    const { count } = await query.select('id', { count: 'exact', head: true });
-
-    // Apply pagination
     const offset = (page - 1) * limit;
-    query = query.order('created_at', { ascending: false });
-    const { data, error } = await query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await supabase
+        .from('orders')
+        .select('*, order_items(*)', { count: 'exact' })
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
     if (error) {
         throw new AppError('Failed to fetch user orders', 500);
+    }
+
+    console.log('📦 User orders found:', (data || []).length, 'for user:', userId);
+    if (data && data.length > 0) {
+        console.log('📦 Sample order:', JSON.stringify(data[0], null, 2));
     }
 
     return batchResponse(res, 200, data || [], count || 0, 'User orders retrieved successfully');
