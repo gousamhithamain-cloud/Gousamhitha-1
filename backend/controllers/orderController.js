@@ -4,24 +4,36 @@ const { successResponse, createdResponse, batchResponse } = require('../utils/re
 
 const VALID_STATUSES = ['Pending', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
 
-// Helper: enrich order with user details
-function enrichOrder(order) {
-    const u = order.users || {};
-    const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
-    return {
-        ...order,
-        customer_name: order.customer_name && order.customer_name !== 'Customer'
-            ? order.customer_name
-            : (fullName || order.customer_name || 'N/A'),
-        email: order.email || u.email || 'N/A',
-        phone: order.phone || u.phone || 'N/A',
-        user: u.id ? {
-            id: u.id,
-            name: fullName || 'N/A',
-            email: u.email || 'N/A',
-            phone: u.phone || 'N/A'
-        } : null
-    };
+// Helper: enrich orders with user details via separate query
+async function enrichOrdersWithUsers(orders) {
+    if (!orders.length) return orders;
+
+    // Get unique user IDs
+    const userIds = [...new Set(orders.map(o => o.user_id).filter(Boolean))];
+
+    let usersMap = {};
+    if (userIds.length) {
+        const { data: users } = await supabase
+            .from('users')
+            .select('id, first_name, last_name, email, phone')
+            .in('id', userIds);
+
+        (users || []).forEach(u => { usersMap[u.id] = u; });
+    }
+
+    return orders.map(order => {
+        const u = usersMap[order.user_id] || {};
+        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+        return {
+            ...order,
+            customer_name: (order.customer_name && order.customer_name !== 'Customer')
+                ? order.customer_name
+                : (fullName || order.customer_name || 'N/A'),
+            email: order.email || u.email || 'N/A',
+            phone: order.phone || u.phone || 'N/A',
+            user: u.id ? { id: u.id, name: fullName || 'N/A', email: u.email || 'N/A', phone: u.phone || 'N/A' } : null
+        };
+    });
 }
 
 // GET /api/orders  (admin — all orders)
@@ -31,7 +43,7 @@ const getAllOrders = asyncHandler(async (req, res) => {
 
     let query = supabase
         .from('orders')
-        .select('*, order_items(*), users(id, first_name, last_name, email, phone)', { count: 'exact' })
+        .select('*, order_items(*)', { count: 'exact' })
         .order(sortBy, { ascending: sortBy === 'customer_name' })
         .range(offset, offset + limit - 1);
 
@@ -42,12 +54,12 @@ const getAllOrders = asyncHandler(async (req, res) => {
     const { data, error, count } = await query;
 
     if (error) {
+        console.error('❌ getAllOrders error:', JSON.stringify(error, null, 2));
         throw new AppError('Failed to fetch orders', 500);
     }
 
-    // Enrich orders with user details
-    const enriched = (data || []).map(order => enrichOrder(order));
-
+    // Enrich orders with user details via separate query
+    const enriched = await enrichOrdersWithUsers(data || []);
     return batchResponse(res, 200, enriched, count || 0, 'Orders retrieved successfully');
 });
 
@@ -59,12 +71,13 @@ const getUserOrders = asyncHandler(async (req, res) => {
 
     const { data, error, count } = await supabase
         .from('orders')
-        .select('*, order_items(*), users(id, first_name, last_name, email, phone)', { count: 'exact' })
+        .select('*, order_items(*)', { count: 'exact' })
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
     if (error) {
+        console.error('❌ getUserOrders error:', JSON.stringify(error, null, 2));
         throw new AppError('Failed to fetch user orders', 500);
     }
 
@@ -73,7 +86,7 @@ const getUserOrders = asyncHandler(async (req, res) => {
         console.log('📦 Sample order:', JSON.stringify(data[0], null, 2));
     }
 
-    const enriched = (data || []).map(order => enrichOrder(order));
+    const enriched = await enrichOrdersWithUsers(data || []);
     return batchResponse(res, 200, enriched, count || 0, 'User orders retrieved successfully');
 });
 
@@ -83,7 +96,7 @@ const getOrderById = asyncHandler(async (req, res) => {
 
     const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*), users(id, first_name, last_name, email, phone)')
+        .select('*, order_items(*)')
         .eq('id', id)
         .single();
 
@@ -91,7 +104,8 @@ const getOrderById = asyncHandler(async (req, res) => {
         throw new AppError('Order not found', 404);
     }
 
-    return successResponse(res, 200, enrichOrder(data), 'Order retrieved successfully');
+    const enriched = await enrichOrdersWithUsers([data]);
+    return successResponse(res, 200, enriched[0], 'Order retrieved successfully');
 });
 
 // POST /api/orders
