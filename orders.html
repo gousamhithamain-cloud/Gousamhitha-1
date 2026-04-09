@@ -427,195 +427,73 @@
         }
     </style>
     <script>
-        // Wait for Supabase to be ready
-        window.addEventListener('supabaseReady', async () => {
-            console.log('? Supabase ready, checking authentication...');
-            await checkAndLoadOrders();
-        });
-        
-        // Also try after a delay
-        setTimeout(async () => {
-            if (window.supabase) {
-                await checkAndLoadOrders();
-            }
-        }, 1000);
+        const API_BASE = window.API_BASE_URL || 'http://localhost:4000/api';
 
-        async function checkAndLoadOrders() {
-            if (!window.supabase) {
-                console.log('? Waiting for Supabase...');
-                return;
-            }
-
-            console.log('?? Checking authentication...');
-            
-            try {
-                const { data: { user }, error } = await window.supabase.auth.getUser();
-                
-                if (error) {
-                    console.error('Auth error:', error);
-                    showLoginRequired();
-                    return;
-                }
-                
-                console.log('User authenticated:', !!user);
-                
-                if (user) {
-                    await loadCustomerOrders();
-                } else {
-                    showLoginRequired();
-                }
-            } catch (err) {
-                console.error('Error checking auth:', err);
-                showLoginRequired();
-            }
-        }
-        
-        function showLoginRequired() {
-            const ordersList = document.getElementById('orders-list');
-            if (ordersList) {
-                ordersList.innerHTML = `
-                    <div class="empty-state">
-                        <div style="font-size: 4rem; margin-bottom: 1rem;">🔒</div>
-                        <p style="font-size: 1.2rem; color: #666;">Please login to view your orders</p>
-                        <button onclick="if(typeof openAuthModal==='function'){openAuthModal();}else{window.location.href='login.html';}" style="margin-top: 1rem; padding: 0.7rem 1.5rem; background: #4a7c59; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px;">Login</button>
-                    </div>
-                `;
-            }
-        }
+        document.addEventListener('DOMContentLoaded', loadCustomerOrders);
 
         async function loadCustomerOrders() {
             const ordersList = document.getElementById('orders-list');
             if (!ordersList) return;
 
+            const userStr = localStorage.getItem('user');
+            const token = localStorage.getItem('token') || localStorage.getItem('auth_token');
+
+            if (!userStr || !token) {
+                ordersList.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size:4rem;margin-bottom:1rem;">🔒</div>
+                        <p style="font-size:1.2rem;color:#666;">Please login to view your orders</p>
+                        <button onclick="if(typeof openAuthModal==='function'){openAuthModal();}else{window.location.href='index.html';}"
+                            style="margin-top:1rem;padding:0.7rem 1.5rem;background:#4a7c59;color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:16px;">
+                            Login
+                        </button>
+                    </div>`;
+                return;
+            }
+
+            const user = JSON.parse(userStr);
             if (typeof showLoader === 'function') showLoader();
 
             try {
-                ordersList.innerHTML = '';
-                
-                // Get current user from Supabase
-                const { data: { user } } = await window.supabase.auth.getUser();
-                
-                if (!user) {
-                    ordersList.innerHTML = '<div class="empty-state"><p>Please login to view your orders</p></div>';
-                    return;
-                }
-                
-                console.log('Fetching orders for user:', user.id);
-                
-                // Fetch orders from Supabase
-                const { data: orders, error } = await window.supabase
-                    .from('orders')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false });
-                
-                if (error) {
-                    console.error('Supabase error:', error);
-                    throw new Error('Failed to fetch orders');
-                }
-                
-                console.log('Orders fetched:', orders);
-                
-                // Fetch order items for each order
-                for (let order of orders) {
-                    const { data: items, error: itemsError } = await window.supabase
-                        .from('order_items')
-                        .select('id, quantity, price, product_id, product_name')
-                        .eq('order_id', order.id);
-                    
-                    console.log(`Order ${order.id} items:`, items);
-                    
-                    if (!itemsError && items) {
-                        // Fetch product details for each item
-                        for (let item of items) {
-                            if (item.product_id) {
-                                const { data: product, error: productError } = await window.supabase
-                                    .from('products')
-                                    .select('id, name, image_url')
-                                    .eq('id', item.product_id)
-                                    .single();
-                                
-                                console.log(`Product for item ${item.id}:`, product);
-                                
-                                if (product) {
-                                    item.products = product;
-                                } else {
-                                    // Fallback to product_name from order_items
-                                    item.products = {
-                                        name: item.product_name,
-                                        image_url: null
-                                    };
-                                }
-                            } else {
-                                // No product_id, use product_name from order_items
-                                item.products = {
-                                    name: item.product_name || 'Product',
-                                    image_url: null
-                                };
-                            }
-                        }
-                        order.order_items = items;
-                    } else {
-                        order.order_items = [];
-                    }
-                }
-                
-                console.log('Final orders with items:', orders);
-                
-                console.log('? Orders loaded from Supabase');
-                console.log(`Found ${orders.length} orders`);
-                
-                // Handle empty orders - this is NOT an error
-                if (orders.length === 0) {
+                const res = await fetch(`${API_BASE}/orders/user/${user.id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const json = await res.json();
+
+                if (!res.ok) throw new Error(json.message || 'Failed to load orders');
+
+                const orders = (json.data && json.data.items) ? json.data.items : [];
+
+                if (!orders.length) {
                     ordersList.innerHTML = `
                         <div class="empty-state">
-                            <div style="font-size: 4rem; margin-bottom: 1rem;">🛒</div>
-                            <p style="font-size: 1.2rem; color: #666;">You haven't placed any orders yet.</p>
-                            <a href="shop.html" style="display: inline-block; margin-top: 1rem; padding: 0.7rem 1.5rem; background: #4a7c59; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Start Shopping</a>
-                        </div>
-                    `;
+                            <div style="font-size:4rem;margin-bottom:1rem;">🛒</div>
+                            <p style="font-size:1.2rem;color:#666;">You haven't placed any orders yet.</p>
+                            <a href="shop.html" style="display:inline-block;margin-top:1rem;padding:0.7rem 1.5rem;background:#4a7c59;color:white;text-decoration:none;border-radius:8px;font-weight:600;">
+                                Start Shopping
+                            </a>
+                        </div>`;
                     return;
                 }
-                
+
+                const statusColor = { 'Pending':'#ff9800','Packed':'#2196F3','Shipped':'#9c27b0','Delivered':'#4caf50','Cancelled':'#d32f2f' };
+
                 ordersList.innerHTML = orders.map(order => {
-                    const orderDate = new Date(order.created_at).toLocaleString('en-IN', { 
-                        day: 'numeric', 
-                        month: 'short', 
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
+                    const orderDate = new Date(order.created_at).toLocaleString('en-IN', {
+                        day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'
                     });
-                    const shortId = order.id.substring(0, 8).toUpperCase();
-                    
-                    const statusColor = {
-                        'Pending': '#ff9800',
-                        'Packed': '#2196F3',
-                        'Shipped': '#9c27b0',
-                        'Delivered': '#4caf50'
-                    }[order.order_status] || '#666';
-                    
-                    // Build order items HTML
-                    let itemsHTML = '';
-                    if (order.order_items && order.order_items.length > 0) {
-                        itemsHTML = `
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
-                                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Order Items:</h4>
-                                ${order.order_items.map(item => {
-                                    const product = item.products;
-                                    return `
-                                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
-                                            <div style="flex: 1;">
-                                                <div style="font-weight: 500; font-size: 15px; color: #333;">${product?.name || item.product_name || 'Product'}</div>
-                                                <div style="font-size: 13px; color: #666; margin-top: 4px;">Qty: ${item.quantity} � ?${item.price}</div>
-                                            </div>
-                                            <div style="font-weight: 600; font-size: 16px; color: #4a7c59;">?${(item.quantity * item.price).toFixed(2)}</div>
-                                        </div>
-                                    `;
-                                }).join('')}
+                    const shortId = (order.id || '').substring(0, 8).toUpperCase();
+                    const color = statusColor[order.status] || '#666';
+
+                    const itemsHTML = (order.order_items || []).map(item => `
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5;">
+                            <div>
+                                <div style="font-weight:500;">${item.product_name || 'Product'}</div>
+                                <div style="font-size:13px;color:#666;">Qty: ${item.quantity} × ₹${item.price}</div>
                             </div>
-                        `;
-                    }
-                    
+                            <div style="font-weight:600;color:#4a7c59;">₹${(item.quantity * item.price).toFixed(2)}</div>
+                        </div>`).join('');
+
                     return `
                         <div class="order-card">
                             <div class="order-header">
@@ -623,28 +501,24 @@
                                     <div class="order-id">Order #${shortId}</div>
                                     <div class="order-date">${orderDate}</div>
                                 </div>
-                                <div>
-                                    <div class="status-badge-new" style="background: ${statusColor}15; color: ${statusColor};">
-                                        ${order.order_status || 'Pending'}
-                                    </div>
+                                <div class="status-badge-new" style="background:${color}15;color:${color};">
+                                    ${order.status || 'Pending'}
                                 </div>
                             </div>
-                            
-                            ${itemsHTML}
-                            
-                            <div style="border-top: 2px solid #eee; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; font-weight: 600; font-size: 16px;">
-                                <span>Total Amount</span>
-                                <span style="color: #4a7c59;">?${order.total}</span>
+                            ${itemsHTML ? `<div style="margin-top:15px;padding-top:15px;border-top:1px solid #eee;">${itemsHTML}</div>` : ''}
+                            <div style="border-top:2px solid #eee;margin-top:15px;padding-top:15px;display:flex;justify-content:space-between;font-weight:600;font-size:16px;">
+                                <span>Total</span>
+                                <span style="color:#4a7c59;">₹${order.total}</span>
                             </div>
-                        </div>
-                    `;
+                        </div>`;
                 }).join('');
-            } catch (error) {
-                console.error('Error loading orders:', error);
+
+            } catch (err) {
+                console.error('Error loading orders:', err);
                 ordersList.innerHTML = '<div class="empty-state"><p>Error loading orders. Please try again.</p></div>';
+            } finally {
                 if (typeof hideLoader === 'function') hideLoader();
             }
-            if (typeof hideLoader === 'function') hideLoader();
         }
     </script>
     <script src="js/page-detector.js"></script>

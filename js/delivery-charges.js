@@ -1,57 +1,36 @@
-// Delivery Charges Calculator
-// Calculates delivery charges based on pincode and order total
-
+// Delivery Charges Calculator - uses backend API only
 class DeliveryChargeCalculator {
     constructor() {
         this.deliveryInfo = null;
+        this.apiBase = window.API_BASE_URL || 'http://localhost:4000/api';
     }
 
-    // Get delivery charge for a pincode
     async getDeliveryCharge(pincode, orderTotal = 0) {
-        if (!window.supabase) {
-            // Using backend API instead
-            return this.getDefaultCharge();
-        }
+        if (!pincode || pincode.length !== 6) return this.getDefaultCharge();
 
         try {
-            // Call the database function to get delivery charge
-            const { data, error } = await window.supabase
-                .rpc('get_delivery_charge', { pincode_input: pincode });
+            const res = await fetch(`${this.apiBase}/delivery/charge?pincode=${pincode}&total=${orderTotal}`);
+            if (!res.ok) return this.getDefaultCharge();
 
-            if (error) {
-                console.error('Error fetching delivery charge:', error);
-                return this.getDefaultCharge();
-            }
-
-            if (!data || data.length === 0) {
-                return this.getDefaultCharge();
-            }
-
-            const zoneInfo = data[0];
-            
-            // Check if order qualifies for free delivery
-            const isFreeDelivery = zoneInfo.min_order_for_free_delivery && 
-                                   orderTotal >= zoneInfo.min_order_for_free_delivery;
+            const json = await res.json();
+            const d = json.data;
 
             this.deliveryInfo = {
-                zoneName: zoneInfo.zone_name,
-                charge: isFreeDelivery ? 0 : parseFloat(zoneInfo.delivery_charge),
-                originalCharge: parseFloat(zoneInfo.delivery_charge),
-                minOrderForFree: zoneInfo.min_order_for_free_delivery ? parseFloat(zoneInfo.min_order_for_free_delivery) : null,
-                estimatedDays: zoneInfo.estimated_days,
-                isFreeDelivery: isFreeDelivery,
-                pincode: pincode
+                zoneName: d.zone_name,
+                charge: d.charge,
+                originalCharge: d.original_charge,
+                minOrderForFree: d.min_order_for_free,
+                estimatedDays: d.estimated_days,
+                isFreeDelivery: d.is_free,
+                pincode
             };
-
             return this.deliveryInfo;
-
-        } catch (error) {
-            console.error('Exception in getDeliveryCharge:', error);
+        } catch (e) {
+            console.error('Delivery charge lookup failed:', e);
             return this.getDefaultCharge();
         }
     }
 
-    // Get default delivery charge (fallback)
     getDefaultCharge() {
         return {
             zoneName: 'Standard Delivery',
@@ -64,98 +43,50 @@ class DeliveryChargeCalculator {
         };
     }
 
-    // Calculate total with delivery
     calculateTotal(subtotal, deliveryCharge) {
         return parseFloat(subtotal) + parseFloat(deliveryCharge);
     }
 
-    // Format delivery info for display
-    formatDeliveryInfo(deliveryInfo) {
-        if (!deliveryInfo) return '';
+    formatDeliveryInfo(info) {
+        if (!info) return '';
+        const freeMsg = info.minOrderForFree && !info.isFreeDelivery
+            ? `<div style="font-size:12px;color:#666;margin-top:6px;">Add ₹${(info.minOrderForFree - (window.cartSubtotal || 0)).toFixed(2)} more for free delivery</div>`
+            : '';
+        const chargeDisplay = info.isFreeDelivery
+            ? '<span style="color:#4caf50;font-weight:700;">FREE</span>'
+            : `₹${info.charge}`;
 
-        let html = `
-            <div class="delivery-info-box" style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196F3;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div>
-                        <strong style="color: #333; font-size: 16px;">🚚 ${deliveryInfo.zoneName}</strong>
-                        <div style="color: #666; font-size: 13px; margin-top: 4px;">
-                            Estimated Delivery: ${deliveryInfo.estimatedDays}
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        ${deliveryInfo.isFreeDelivery 
-                            ? `<span style="color: #4caf50; font-weight: 600; font-size: 16px;">FREE</span>
-                               <div style="color: #999; font-size: 12px; text-decoration: line-through;">₹${deliveryInfo.originalCharge}</div>`
-                            : `<span style="color: #333; font-weight: 600; font-size: 16px;">₹${deliveryInfo.charge}</span>`
-                        }
-                    </div>
+        return `
+            <div style="background:#f0f8ff;padding:12px;border-radius:8px;margin:10px 0;border-left:4px solid #2196F3;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong>🚚 ${info.zoneName}</strong>
+                    <span style="font-weight:700;">${chargeDisplay}</span>
                 </div>
-        `;
-
-        // Show free delivery progress
-        if (!deliveryInfo.isFreeDelivery && deliveryInfo.minOrderForFree) {
-            const remaining = deliveryInfo.minOrderForFree - (window.cartSubtotal || 0);
-            if (remaining > 0) {
-                html += `
-                    <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 10px;">
-                        <div style="color: #856404; font-size: 13px;">
-                            💡 Add ₹${remaining.toFixed(2)} more to get FREE delivery!
-                        </div>
-                        <div style="background: #fff; height: 6px; border-radius: 3px; margin-top: 6px; overflow: hidden;">
-                            <div style="background: #ffc107; height: 100%; width: ${((window.cartSubtotal || 0) / deliveryInfo.minOrderForFree * 100)}%; transition: width 0.3s;"></div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        html += `</div>`;
-        return html;
+                <div style="font-size:12px;color:#666;margin-top:4px;">Estimated: ${info.estimatedDays}</div>
+                ${freeMsg}
+            </div>`;
     }
 
-    // Show delivery charge in checkout
     async updateCheckoutDelivery(pincode, subtotal) {
-        const deliveryInfo = await this.getDeliveryCharge(pincode, subtotal);
-        
-        // Update delivery charge display
-        const deliveryChargeEl = document.getElementById('delivery-charge');
-        if (deliveryChargeEl) {
-            deliveryChargeEl.textContent = deliveryInfo.isFreeDelivery 
-                ? 'FREE' 
-                : `₹${deliveryInfo.charge}`;
-        }
+        const info = await this.getDeliveryCharge(pincode, subtotal);
 
-        // Update delivery info box
-        const deliveryInfoEl = document.getElementById('delivery-info-box');
-        if (deliveryInfoEl) {
-            deliveryInfoEl.innerHTML = this.formatDeliveryInfo(deliveryInfo);
-        }
-
-        // Update total
-        const total = this.calculateTotal(subtotal, deliveryInfo.charge);
+        const chargeEl = document.getElementById('delivery-charge');
+        const infoBox = document.getElementById('delivery-info-box');
         const totalEl = document.getElementById('order-total');
+
+        if (chargeEl) {
+            chargeEl.textContent = info.isFreeDelivery ? 'FREE' : `₹${info.charge}`;
+            chargeEl.style.color = info.isFreeDelivery ? '#4caf50' : '#333';
+        }
+        if (infoBox) infoBox.innerHTML = this.formatDeliveryInfo(info);
         if (totalEl) {
+            const total = (subtotal || 0) + info.charge;
             totalEl.textContent = `₹${total.toFixed(2)}`;
         }
 
-        return deliveryInfo;
+        window.currentDeliveryCharge = info.charge;
+        return info;
     }
 }
 
-// Create global instance
 window.deliveryCalculator = new DeliveryChargeCalculator();
-
-// Auto-calculate on pincode change
-document.addEventListener('DOMContentLoaded', function() {
-    const pincodeInput = document.getElementById('pincode') || document.getElementById('checkout-pincode');
-    
-    if (pincodeInput) {
-        pincodeInput.addEventListener('blur', async function() {
-            const pincode = this.value.trim();
-            if (pincode && pincode.length === 6) {
-                const subtotal = parseFloat(document.getElementById('cart-subtotal')?.textContent?.replace('₹', '') || 0);
-                await window.deliveryCalculator.updateCheckoutDelivery(pincode, subtotal);
-            }
-        });
-    }
-});

@@ -13,6 +13,7 @@ const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
 const vendorRoutes = require('./routes/vendors');
+const deliveryRoutes = require('./routes/delivery');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -43,6 +44,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/delivery', deliveryRoutes);
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
