@@ -202,7 +202,7 @@ async function loadOrdersTable() {
                 <td>
                     ${status === 'Delivered' || status === 'Cancelled' ? 
                         `<button class="btn-delete" onclick="deleteOrder('${order.id}')" style="background:#dc3545;color:white;border:none;padding:0.5rem 1rem;border-radius:5px;cursor:pointer;">Delete</button>` : 
-                        `<span style="color:#999;font-size:0.85rem;">Available after delivery</span>`
+                        `<button class="btn-delete" onclick="deleteOrder('${order.id}')" style="background:#dc3545;color:white;border:none;padding:0.5rem 1rem;border-radius:5px;cursor:pointer;">Delete</button>`
                     }
                 </td>
             </tr>`;

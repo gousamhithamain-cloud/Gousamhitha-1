@@ -135,7 +135,7 @@ function displayOrders(orders) {
                 <button class="btn-view" onclick="viewOrderDetails('${order.id}')">View Details</button>
                 ${status === 'Delivered' || status === 'Cancelled' ? 
                     `<button class="btn-delete" onclick="deleteOrder('${order.id}')">Delete</button>` : 
-                    '<span style="color: #999; font-size: 0.85rem;">Delete after delivery</span>'
+                    `<button class="btn-delete" onclick="deleteOrder('${order.id}')" style="background:#dc3545;color:white;border:none;padding:0.5rem 1rem;border-radius:5px;cursor:pointer;margin-left:0.5rem;">Delete</button>`
                 }
             </div>
         </div>`;
