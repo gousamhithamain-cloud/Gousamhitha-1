@@ -15,6 +15,39 @@ function getAPIBase() {
 
 console.log('🔗 Using API:', getAPIBase());
 
+// ── Global 401 interceptor: auto-logout on expired token ──────────────────
+(function() {
+    const _fetch = window.fetch;
+    window.fetch = async function(...args) {
+        const response = await _fetch(...args);
+        if (response.status === 401) {
+            const url = typeof args[0] === 'string' ? args[0] : '';
+            // Only auto-logout for our backend API calls
+            if (url.includes('localhost:4000') || url.includes('/api/')) {
+                const clone = response.clone();
+                try {
+                    const json = await clone.json();
+                    if (json.message && json.message.includes('expired')) {
+                        console.warn('🔒 Token expired - clearing session');
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        if (typeof showToast === 'function') {
+                            showToast('Session expired. Please login again.', 'error');
+                        }
+                        setTimeout(() => {
+                            if (!window.location.pathname.includes('index.html') &&
+                                !window.location.pathname.endsWith('/')) {
+                                window.location.href = 'index.html';
+                            }
+                        }, 1500);
+                    }
+                } catch(e) { /* ignore parse errors */ }
+            }
+        }
+        return response;
+    };
+})();
+
 // ══════════════════════════════════════════════════════════════════════════════
 // STORAGE HELPERS
 // ══════════════════════════════════════════════════════════════════════════════
