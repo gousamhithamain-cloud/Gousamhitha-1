@@ -88,53 +88,58 @@ function displayOrders(orders) {
         return;
     }
     
-    container.innerHTML = orders.map(order => `
+    container.innerHTML = orders.map(order => {
+        const name = order.customer_name || order.user?.name || 'N/A';
+        const email = order.email || order.customer_email || order.user?.email || 'N/A';
+        const phone = order.phone || order.customer_phone || order.user?.phone || 'N/A';
+        const total = order.total || order.total_amount || 0;
+        const status = order.order_status || order.status || 'Pending';
+        const date = order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A';
+        const shortId = (order.id || '').substring(0, 8).toUpperCase();
+
+        return `
         <div class="order-card" data-order-id="${order.id}">
             <div class="order-header">
-                <div class="order-id">Order #${order.id}</div>
-                <div class="order-date">${new Date(order.created_at).toLocaleDateString()}</div>
+                <div class="order-id">Order #${shortId}</div>
+                <div class="order-date">${date}</div>
             </div>
-            
             <div class="order-details">
                 <div class="detail-row">
                     <span class="label">Customer:</span>
-                    <span class="value">${order.customer_name || 'N/A'}</span>
+                    <span class="value">${name}</span>
                 </div>
                 <div class="detail-row">
                     <span class="label">Email:</span>
-                    <span class="value">${order.customer_email || 'N/A'}</span>
+                    <span class="value">${email}</span>
                 </div>
                 <div class="detail-row">
                     <span class="label">Phone:</span>
-                    <span class="value">${order.customer_phone || 'N/A'}</span>
+                    <span class="value">${phone}</span>
                 </div>
                 <div class="detail-row">
                     <span class="label">Total:</span>
-                    <span class="value">₹${order.total_amount || order.total || 0}</span>
+                    <span class="value">₹${total}</span>
                 </div>
             </div>
-            
             <div class="order-status">
                 <label>Status:</label>
                 <select class="status-select" onchange="updateOrderStatus('${order.id}', this.value)">
-                    <option value="pending" ${order.order_status === 'pending' ? 'selected' : ''}>Pending</option>
-                    <option value="confirmed" ${order.order_status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
-                    <option value="packed" ${order.order_status === 'packed' ? 'selected' : ''}>Packed</option>
-                    <option value="shipped" ${order.order_status === 'shipped' ? 'selected' : ''}>Shipped</option>
-                    <option value="delivered" ${order.order_status === 'delivered' ? 'selected' : ''}>Delivered</option>
-                    <option value="cancelled" ${order.order_status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                    <option value="Pending" ${status === 'Pending' ? 'selected' : ''}>Pending</option>
+                    <option value="Packed" ${status === 'Packed' ? 'selected' : ''}>Packed</option>
+                    <option value="Shipped" ${status === 'Shipped' ? 'selected' : ''}>Shipped</option>
+                    <option value="Delivered" ${status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                    <option value="Cancelled" ${status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
                 </select>
             </div>
-            
             <div class="order-actions">
                 <button class="btn-view" onclick="viewOrderDetails('${order.id}')">View Details</button>
-                ${order.order_status === 'delivered' || order.order_status === 'cancelled' ? 
+                ${status === 'Delivered' || status === 'Cancelled' ? 
                     `<button class="btn-delete" onclick="deleteOrder('${order.id}')">Delete</button>` : 
                     '<span style="color: #999; font-size: 0.85rem;">Delete after delivery</span>'
                 }
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
