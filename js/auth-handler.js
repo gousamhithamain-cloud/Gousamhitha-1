@@ -534,44 +534,59 @@ function initGoogleSignIn() {
         callback: handleGoogleCredential,
         auto_select: false,
         cancel_on_tap_outside: true,
+        use_fedcm_for_prompt: false,
+    });
+
+    // Render real Google button inside the modal containers
+    const containers = document.querySelectorAll('.google-btn-container');
+    containers.forEach(container => {
+        container.innerHTML = '';
+        window.google.accounts.id.renderButton(container, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+            width: Math.min(container.parentElement?.offsetWidth || 300, 400),
+        });
+        // Show fallback button if render fails
+        setTimeout(() => {
+            if (!container.querySelector('iframe, div[style]')) {
+                const fallback = document.getElementById('google-signin-fallback');
+                if (fallback) { fallback.style.display = ''; container.style.display = 'none'; }
+            }
+        }, 1000);
     });
 }
 
 function handleGoogleSignIn() {
     loadGoogleScript();
-    // Wait for Google script then prompt
-    const tryPrompt = () => {
+    const tryInit = () => {
         if (window.google && window.google.accounts) {
             initGoogleSignIn();
-            window.google.accounts.id.prompt((notification) => {
-                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                    // Fallback to renderButton popup
-                    triggerGooglePopup();
-                }
-            });
         } else {
-            setTimeout(tryPrompt, 300);
+            setTimeout(tryInit, 300);
         }
     };
-    tryPrompt();
+    tryInit();
 }
 
 function triggerGooglePopup() {
-    // Create a temporary div and render the Google button, then click it
-    const tempDiv = document.createElement('div');
-    tempDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
-    document.body.appendChild(tempDiv);
-
-    window.google.accounts.id.renderButton(tempDiv, {
-        type: 'standard',
-        theme: 'outline',
-        size: 'large',
-    });
-
-    const btn = tempDiv.querySelector('div[role="button"]');
-    if (btn) btn.click();
-    setTimeout(() => document.body.removeChild(tempDiv), 1000);
+    // Not needed — using rendered button
 }
+
+// Auto-init when Google script loads
+window.addEventListener('load', () => {
+    loadGoogleScript();
+    // Poll until google is ready then init
+    const poll = setInterval(() => {
+        if (window.google && window.google.accounts) {
+            clearInterval(poll);
+            initGoogleSignIn();
+        }
+    }, 200);
+    setTimeout(() => clearInterval(poll), 10000);
+});
 
 function handleGoogleSignUp() {
     handleGoogleSignIn(); // Same flow for sign up
