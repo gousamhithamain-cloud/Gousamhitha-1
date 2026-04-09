@@ -189,19 +189,26 @@ function displayOrders(orders) {
         return;
     }
     
-    ordersContainer.innerHTML = orders.map(order => `
-        <div class="order-card" style="border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <strong>Order #${order.id.substring(0, 8)}</strong>
-                <span style="color: #4a7c59;">${order.order_status || order.status || 'Pending'}</span>
+    ordersContainer.innerHTML = orders.map(order => {
+        const total = order.total || order.total_amount || 0;
+        const dateStr = order.created_at
+            ? new Date(order.created_at).toLocaleDateString('en-IN')
+            : 'N/A';
+        const status = order.order_status || order.status || 'Pending';
+        const shortId = (order.id || '').substring(0, 8).toUpperCase();
+        return `
+        <div class="order-card" style="border:1px solid #ddd;padding:1rem;margin-bottom:1rem;border-radius:8px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;">
+                <strong>Order #${shortId}</strong>
+                <span style="color:#4a7c59;">${status}</span>
             </div>
-            <div style="color: #666; font-size: 0.9rem;">
-                <p>Total: ₹${order.total || order.total_amount || 0}</p>
-                <p>Date: ${new Date(order.created_at).toLocaleDateString()}</p>
+            <div style="color:#666;font-size:0.9rem;">
+                <p>Total: ₹${total}</p>
+                <p>Date: ${dateStr}</p>
                 ${order.order_items && order.order_items.length > 0 ? `<p>Items: ${order.order_items.length}</p>` : ''}
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 function showNotLoggedIn() {
