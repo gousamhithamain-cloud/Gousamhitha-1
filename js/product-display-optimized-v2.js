@@ -88,8 +88,10 @@
             var safeName = (p.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
             return '<div class="product-card">' +
-                '<img src="' + img + '" alt="' + p.name + '"' +
+                '<div class="product-img-wrap">' +
+                '<img src="' + img + '" alt="' + p.name + '" loading="lazy"' +
                 ' onerror="this.onerror=null;this.src=\'images/placeholder.jpg\'">' +
+                '</div>' +
                 '<h3 style="margin:.8rem 0 .3rem;font-size:1.1rem;color:#333;">' + p.name + '</h3>' +
                 (unit ? '<p style="color:#666;font-size:.85rem;margin:.2rem 0;font-weight:500;">' + unit + '</p>' : '') +
                 '<p class="price" style="font-size:1.3rem;font-weight:700;color:#4a7c59;margin:.5rem 0;">&#8377;' + p.price + '</p>' +

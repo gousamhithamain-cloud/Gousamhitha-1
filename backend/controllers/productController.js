@@ -8,7 +8,7 @@ const getProducts = asyncHandler(async (req, res) => {
 
     let query = supabase
         .from('products')
-        .select('id, name, category, subcategory, price, stock, unit, unit_quantity, display_unit, in_stock, created_at, updated_at');
+        .select('id, name, category, subcategory, price, stock, unit, unit_quantity, display_unit, image_url, in_stock, created_at, updated_at');
 
     // Apply filters
     if (category !== undefined && category !== '') {
@@ -38,10 +38,10 @@ const getProducts = asyncHandler(async (req, res) => {
         throw new AppError('Failed to fetch products', 500);
     }
 
-    // Add placeholder image URLs for products without external URLs
+    // Return products with image_url as-is (base64 or URL)
     const productsWithImages = (data || []).map(product => ({
         ...product,
-        image_url: 'images/placeholder.png' // Use placeholder instead of base64
+        image_url: product.image_url || null
     }));
 
     console.log('Products fetched:', productsWithImages ? productsWithImages.length : 0);
