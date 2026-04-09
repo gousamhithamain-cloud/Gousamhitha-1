@@ -13,7 +13,7 @@ const getAllOrders = asyncHandler(async (req, res) => {
         .select('*, order_items(*)');
 
     if (status && VALID_STATUSES.includes(status)) {
-        query = query.eq('status', status);
+        query = query.eq('order_status', status);
     }
 
     // Get total count
@@ -108,22 +108,20 @@ const createOrder = asyncHandler(async (req, res) => {
 
     // Build insert object - try both column name variants
     const orderInsert = {
+        user_id,
         customer_name,
         email,
         phone,
-        delivery_address: finalAddress,
+        address: finalAddress,
+        delivery_address: delivery_address || address || finalAddress,
         city,
         pincode,
         notes: notes || null,
         total: orderTotal,
-        delivery_charges: delivery_charge || 0,
         payment_method,
-        status: 'Pending',
+        order_status: 'Pending',
         payment_status: 'pending'
     };
-
-    // Add user_id - try both column names
-    orderInsert.user_id = user_id;
 
     console.log('📦 Order insert payload:', JSON.stringify(orderInsert, null, 2));
 
@@ -135,21 +133,6 @@ const createOrder = asyncHandler(async (req, res) => {
 
     if (orderErr) {
         console.error('❌ Order insert error:', JSON.stringify(orderErr, null, 2));
-        // If user_id column doesn't exist, try customer_id
-        if (orderErr.message && orderErr.message.includes('user_id')) {
-            delete orderInsert.user_id;
-            orderInsert.customer_id = user_id;
-            const { data: order2, error: orderErr2 } = await supabase
-                .from('orders')
-                .insert(orderInsert)
-                .select()
-                .single();
-            if (orderErr2) {
-                console.error('❌ Order insert error (retry):', JSON.stringify(orderErr2, null, 2));
-                throw new AppError('Failed to create order: ' + orderErr2.message, 500);
-            }
-            return await finishOrder(res, order2, items, user_id);
-        }
         throw new AppError('Failed to create order: ' + orderErr.message, 500);
     }
 
@@ -162,7 +145,8 @@ async function finishOrder(res, order, items, user_id) {
         product_id: item.product_id,
         product_name: item.product_name,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        subtotal: item.quantity * item.price
     }));
 
     const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
@@ -199,7 +183,7 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 
     const { data, error } = await supabase
         .from('orders')
-        .update({ status, updated_at: new Date().toISOString() })
+        .update({ order_status: status })
         .eq('id', id)
         .select()
         .single();
