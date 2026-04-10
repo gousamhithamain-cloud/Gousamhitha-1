@@ -58,6 +58,11 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// ── Root Route ────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+    res.json({ status: 'OK', message: 'API is running' });
+});
+
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use(notFound);
 
